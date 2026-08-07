@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.0",
+  "source_system": "MES_MASTER",
+  "extracted_at": "2026-07-16T00:00:00Z",
+  "records": [
+    {
+      "line_id": "LINE-01",
+      "plant_id": "PLANT-01",
+      "line_name": "Compounding Line 1"
+    }
+  ]
+}

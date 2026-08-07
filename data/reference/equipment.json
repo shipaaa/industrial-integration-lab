@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0",
+  "source_system": "MES_MASTER",
+  "extracted_at": "2026-07-16T00:00:00Z",
+  "records": [
+    {
+      "equipment_id": "EXT-01",
+      "line_id": "LINE-01",
+      "equipment_name": "Twin Screw Extruder 1",
+      "equipment_type": "EXTRUDER"
+    }
+  ]
+}

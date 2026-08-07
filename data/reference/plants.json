@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.0",
+  "source_system": "MES_MASTER",
+  "extracted_at": "2026-07-16T00:00:00Z",
+  "records": [
+    {
+      "plant_id": "PLANT-01",
+      "plant_name": "North Polymer Plant",
+      "timezone": "Europe/Moscow"
+    }
+  ]
+}

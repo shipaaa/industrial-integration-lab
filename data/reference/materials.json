@@ -1,0 +1,29 @@
+{
+  "schema_version": "1.0",
+  "source_system": "MES_MASTER",
+  "extracted_at": "2026-07-16T00:00:00Z",
+  "records": [
+    {
+      "material_id": "MAT-PE-01",
+      "material_name": "Polyethylene Compound A",
+      "grade": "PE-A100",
+      "parameter_ranges": [
+        {"parameter_code": "melt_temperature_c", "unit": "degC", "min_value": 180.0, "max_value": 205.0},
+        {"parameter_code": "melt_pressure_bar", "unit": "bar", "min_value": 85.0, "max_value": 115.0},
+        {"parameter_code": "screw_speed_rpm", "unit": "rpm", "min_value": 280.0, "max_value": 340.0},
+        {"parameter_code": "power_kw", "unit": "kW", "min_value": 95.0, "max_value": 135.0}
+      ]
+    },
+    {
+      "material_id": "MAT-PP-01",
+      "material_name": "Polypropylene Compound B",
+      "grade": "PP-B220",
+      "parameter_ranges": [
+        {"parameter_code": "melt_temperature_c", "unit": "degC", "min_value": 195.0, "max_value": 220.0},
+        {"parameter_code": "melt_pressure_bar", "unit": "bar", "min_value": 90.0, "max_value": 125.0},
+        {"parameter_code": "screw_speed_rpm", "unit": "rpm", "min_value": 300.0, "max_value": 360.0},
+        {"parameter_code": "power_kw", "unit": "kW", "min_value": 105.0, "max_value": 145.0}
+      ]
+    }
+  ]
+}
