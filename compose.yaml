@@ -1,0 +1,25 @@
+name: plantbridge
+
+services:
+  postgres:
+    image: postgres:16.14-bookworm
+    environment:
+      POSTGRES_DB: plantbridge
+      POSTGRES_USER: plantbridge
+      POSTGRES_PASSWORD: plantbridge_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+      - ./db/test:/db/test:ro
+      - ./data/reference:/reference:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U plantbridge -d plantbridge"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

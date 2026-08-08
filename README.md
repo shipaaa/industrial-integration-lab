@@ -6,7 +6,9 @@ Portfolio-grade industrial data integration project demonstrating how equipment 
 
 The lab is designed to demonstrate the practical responsibilities of a Middle Technical Implementation Engineer: discovery, source analysis, solution design, data mapping, integration development, testing, deployment planning, troubleshooting, and operational handover.
 
-> **Project status:** Stage 0 — Discovery and Design. Requirements, source contracts, architecture, data model, and acceptance criteria are being defined before implementation begins.
+> **Project status:** Stage 1 — Platform Foundation. ADR-001 is accepted and the
+> reference-data vertical slice is implemented as an executable database
+> contract. NiFi deployment is the next architecture gate.
 
 ## Business Scenario
 
@@ -148,3 +150,29 @@ Stage 0 must be reviewed and agreed before code or infrastructure implementation
 - **Database:** PostgreSQL
 - **Runtime:** Docker Compose, Linux containers
 - **Documentation:** Markdown, Mermaid diagrams
+
+## First Vertical Slice
+
+The current slice loads one plant, one line, one extruder, two materials, and
+three production batches from JSON into PostgreSQL. It preserves the raw record,
+audits every attempt, rejects invalid records, treats an unchanged replay as a
+duplicate, and exposes the initial `BATCH-003` dossier.
+
+Prerequisites: Docker with Compose v2 and Python 3.9 or newer.
+
+```bash
+make test
+make start
+make verify-reference
+make replay-reference
+```
+
+`make start` initializes and loads the reference files on a new PostgreSQL
+volume. `make replay-reference` loads the same documents again and proves that
+the ODS counts remain unchanged while duplicate attempts appear in audit.
+
+The shell loader is a temporary contract-test adapter. The accepted target
+architecture calls the same `ods.load_reference_document` function from NiFi.
+
+Architecture decisions are recorded in [`docs/adr`](docs/adr), and the current
+solution design is in [`docs/04-solution-design.md`](docs/04-solution-design.md).
