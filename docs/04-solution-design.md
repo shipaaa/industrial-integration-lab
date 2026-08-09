@@ -42,4 +42,6 @@ The slice is complete when:
 - NiFi version and flow deployment strategy;
 - whether flow definitions are promoted through NiFi Registry or imported
   directly by a bootstrap client;
-- REST watermark semantics when multiple records share the same update time.
+
+REST watermark semantics are defined in
+[`ADR-002`](adr/0002-telemetry-watermark-and-pagination.md).
