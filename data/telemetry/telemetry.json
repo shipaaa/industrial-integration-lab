@@ -1,0 +1,30 @@
+{
+  "schema_version": "1.0",
+  "source_system": "EXTRUDER_SCADA",
+  "records": [
+    {"source_record_id":"TEL-0001","batch_id":"BATCH-001","equipment_id":"EXT-01","parameter_code":"melt_temperature_c","value":191.2,"unit":"degC","measured_at":"2026-07-15T05:30:00Z","updated_at":"2026-07-16T13:00:00Z"},
+    {"source_record_id":"TEL-0002","batch_id":"BATCH-001","equipment_id":"EXT-01","parameter_code":"melt_pressure_bar","value":98.4,"unit":"bar","measured_at":"2026-07-15T05:30:00Z","updated_at":"2026-07-16T13:00:00Z"},
+    {"source_record_id":"TEL-0003","batch_id":"BATCH-001","equipment_id":"EXT-01","parameter_code":"screw_speed_rpm","value":310.0,"unit":"rpm","measured_at":"2026-07-15T05:30:00Z","updated_at":"2026-07-16T13:00:00Z"},
+    {"source_record_id":"TEL-0004","batch_id":"BATCH-001","equipment_id":"EXT-01","parameter_code":"power_kw","value":112.5,"unit":"kW","measured_at":"2026-07-15T05:30:00Z","updated_at":"2026-07-16T13:00:00Z"},
+    {"source_record_id":"TEL-0005","batch_id":"BATCH-001","equipment_id":"EXT-01","parameter_code":"melt_temperature_c","value":194.1,"unit":"degC","measured_at":"2026-07-15T06:00:00Z","updated_at":"2026-07-16T13:00:01Z"},
+    {"source_record_id":"TEL-0006","batch_id":"BATCH-001","equipment_id":"EXT-01","parameter_code":"melt_pressure_bar","value":101.2,"unit":"bar","measured_at":"2026-07-15T06:00:00Z","updated_at":"2026-07-16T13:00:01Z"},
+    {"source_record_id":"TEL-0007","batch_id":"BATCH-001","equipment_id":"EXT-01","parameter_code":"screw_speed_rpm","value":315.0,"unit":"rpm","measured_at":"2026-07-15T06:00:00Z","updated_at":"2026-07-16T13:00:01Z"},
+    {"source_record_id":"TEL-0008","batch_id":"BATCH-001","equipment_id":"EXT-01","parameter_code":"power_kw","value":116.0,"unit":"kW","measured_at":"2026-07-15T06:00:00Z","updated_at":"2026-07-16T13:00:01Z"},
+    {"source_record_id":"TEL-0009","batch_id":"BATCH-002","equipment_id":"EXT-01","parameter_code":"melt_temperature_c","value":207.3,"unit":"degC","measured_at":"2026-07-15T07:30:00Z","updated_at":"2026-07-16T13:00:02Z"},
+    {"source_record_id":"TEL-0010","batch_id":"BATCH-002","equipment_id":"EXT-01","parameter_code":"melt_pressure_bar","value":108.6,"unit":"bar","measured_at":"2026-07-15T07:30:00Z","updated_at":"2026-07-16T13:00:02Z"},
+    {"source_record_id":"TEL-0011","batch_id":"BATCH-002","equipment_id":"EXT-01","parameter_code":"screw_speed_rpm","value":330.0,"unit":"rpm","measured_at":"2026-07-15T07:30:00Z","updated_at":"2026-07-16T13:00:02Z"},
+    {"source_record_id":"TEL-0012","batch_id":"BATCH-002","equipment_id":"EXT-01","parameter_code":"power_kw","value":124.8,"unit":"kW","measured_at":"2026-07-15T07:30:00Z","updated_at":"2026-07-16T13:00:02Z"},
+    {"source_record_id":"TEL-0013","batch_id":"BATCH-002","equipment_id":"EXT-01","parameter_code":"melt_temperature_c","value":211.0,"unit":"degC","measured_at":"2026-07-15T08:30:00Z","updated_at":"2026-07-16T13:00:03Z"},
+    {"source_record_id":"TEL-0014","batch_id":"BATCH-002","equipment_id":"EXT-01","parameter_code":"melt_pressure_bar","value":111.3,"unit":"bar","measured_at":"2026-07-15T08:30:00Z","updated_at":"2026-07-16T13:00:03Z"},
+    {"source_record_id":"TEL-0015","batch_id":"BATCH-002","equipment_id":"EXT-01","parameter_code":"screw_speed_rpm","value":338.0,"unit":"rpm","measured_at":"2026-07-15T08:30:00Z","updated_at":"2026-07-16T13:00:03Z"},
+    {"source_record_id":"TEL-0016","batch_id":"BATCH-002","equipment_id":"EXT-01","parameter_code":"power_kw","value":131.1,"unit":"kW","measured_at":"2026-07-15T08:30:00Z","updated_at":"2026-07-16T13:00:03Z"},
+    {"source_record_id":"TEL-0017","batch_id":"BATCH-003","equipment_id":"EXT-01","parameter_code":"melt_temperature_c","value":198.7,"unit":"degC","measured_at":"2026-07-15T10:20:00Z","updated_at":"2026-07-16T13:00:04Z"},
+    {"source_record_id":"TEL-0018","batch_id":"BATCH-003","equipment_id":"EXT-01","parameter_code":"melt_pressure_bar","value":104.2,"unit":"bar","measured_at":"2026-07-15T10:20:00Z","updated_at":"2026-07-16T13:00:04Z"},
+    {"source_record_id":"TEL-0019","batch_id":"BATCH-003","equipment_id":"EXT-01","parameter_code":"screw_speed_rpm","value":318.0,"unit":"rpm","measured_at":"2026-07-15T10:20:00Z","updated_at":"2026-07-16T13:00:04Z"},
+    {"source_record_id":"TEL-0020","batch_id":"BATCH-003","equipment_id":"EXT-01","parameter_code":"power_kw","value":119.6,"unit":"kW","measured_at":"2026-07-15T10:20:00Z","updated_at":"2026-07-16T13:00:04Z"},
+    {"source_record_id":"TEL-0021","batch_id":"BATCH-003","equipment_id":"EXT-01","parameter_code":"melt_temperature_c","value":214.0,"unit":"degC","measured_at":"2026-07-15T10:50:00Z","updated_at":"2026-07-16T13:00:05Z"},
+    {"source_record_id":"TEL-0022","batch_id":"BATCH-003","equipment_id":"EXT-01","parameter_code":"melt_pressure_bar","value":109.8,"unit":"bar","measured_at":"2026-07-15T10:50:00Z","updated_at":"2026-07-16T13:00:05Z"},
+    {"source_record_id":"TEL-0023","batch_id":"BATCH-003","equipment_id":"EXT-01","parameter_code":"screw_speed_rpm","value":322.0,"unit":"rpm","measured_at":"2026-07-15T10:50:00Z","updated_at":"2026-07-16T13:00:05Z"},
+    {"source_record_id":"TEL-0024","batch_id":"BATCH-003","equipment_id":"EXT-01","parameter_code":"power_kw","value":126.4,"unit":"kW","measured_at":"2026-07-15T10:50:00Z","updated_at":"2026-07-16T13:00:05Z"}
+  ]
+}
