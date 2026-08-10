@@ -35,17 +35,26 @@ CREATE INDEX ix_stg_reference_record_correlation
 CREATE TABLE audit.record_processing (
     processing_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     run_id uuid NOT NULL REFERENCES audit.load_run(run_id),
-    stg_record_id bigint NOT NULL REFERENCES stg.reference_record(stg_record_id),
+    record_type text NOT NULL CHECK (record_type IN ('REFERENCE', 'TELEMETRY')),
+    stg_reference_record_id bigint REFERENCES stg.reference_record(stg_record_id),
+    stg_telemetry_record_id bigint,
     correlation_id uuid NOT NULL,
     outcome text NOT NULL CHECK (outcome IN ('ACCEPTED', 'REJECTED', 'DUPLICATE')),
     processed_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-    detail text
+    detail text,
+    CONSTRAINT ck_audit_record_processing_stg_type CHECK (
+        (record_type = 'REFERENCE' AND stg_reference_record_id IS NOT NULL AND stg_telemetry_record_id IS NULL)
+        OR
+        (record_type = 'TELEMETRY' AND stg_reference_record_id IS NULL AND stg_telemetry_record_id IS NOT NULL)
+    )
 );
 
 CREATE TABLE rejected.record (
     rejected_record_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     run_id uuid NOT NULL REFERENCES audit.load_run(run_id),
-    stg_record_id bigint NOT NULL REFERENCES stg.reference_record(stg_record_id),
+    record_type text NOT NULL CHECK (record_type IN ('REFERENCE', 'TELEMETRY')),
+    stg_reference_record_id bigint REFERENCES stg.reference_record(stg_record_id),
+    stg_telemetry_record_id bigint,
     source_name text NOT NULL,
     source_object text NOT NULL,
     entity_type text NOT NULL,
@@ -56,7 +65,12 @@ CREATE TABLE rejected.record (
     error_text text NOT NULL,
     rejected_at timestamptz NOT NULL DEFAULT clock_timestamp(),
     replay_status text NOT NULL DEFAULT 'PENDING'
-        CHECK (replay_status IN ('PENDING', 'REPLAYED', 'DISCARDED'))
+        CHECK (replay_status IN ('PENDING', 'REPLAYED', 'DISCARDED')),
+    CONSTRAINT ck_rejected_record_stg_type CHECK (
+        (record_type = 'REFERENCE' AND stg_reference_record_id IS NOT NULL AND stg_telemetry_record_id IS NULL)
+        OR
+        (record_type = 'TELEMETRY' AND stg_reference_record_id IS NULL AND stg_telemetry_record_id IS NOT NULL)
+    )
 );
 
 CREATE TABLE rejected.replay_history (
@@ -132,6 +146,7 @@ CREATE TABLE ods.production_batch (
 CREATE TABLE control.watermark (
     source_name text PRIMARY KEY,
     watermark_value text NOT NULL,
+    watermark_record_id text,
     updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
 );
 

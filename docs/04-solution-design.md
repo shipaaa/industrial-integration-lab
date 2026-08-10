@@ -45,3 +45,11 @@ The slice is complete when:
 
 REST watermark semantics are defined in
 [`ADR-002`](adr/0002-telemetry-watermark-and-pagination.md).
+
+## Telemetry database slice
+
+NiFi will pass one API page to `ods.load_telemetry_page`. PostgreSQL preserves
+every delivery in STG, validates and deduplicates records into ODS, calculates
+material-range deviations, records reconciliation, and advances the composite
+watermark at the end of the transaction. The transaction boundary is defined
+in [`ADR-003`](adr/0003-telemetry-page-transaction.md).

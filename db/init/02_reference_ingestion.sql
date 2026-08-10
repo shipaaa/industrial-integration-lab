@@ -97,9 +97,10 @@ BEGIN
                 WHERE stg_record_id = v_stg_record_id;
 
                 INSERT INTO audit.record_processing (
-                    run_id, stg_record_id, correlation_id, outcome, detail
+                    run_id, record_type, stg_reference_record_id,
+                    correlation_id, outcome, detail
                 ) VALUES (
-                    v_run_id, v_stg_record_id, v_correlation_id,
+                    v_run_id, 'REFERENCE', v_stg_record_id, v_correlation_id,
                     'DUPLICATE', 'Business key and source checksum already loaded'
                 );
                 v_duplicate := v_duplicate + 1;
@@ -225,9 +226,10 @@ BEGIN
             WHERE stg_record_id = v_stg_record_id;
 
             INSERT INTO audit.record_processing (
-                run_id, stg_record_id, correlation_id, outcome, detail
+                run_id, record_type, stg_reference_record_id,
+                correlation_id, outcome, detail
             ) VALUES (
-                v_run_id, v_stg_record_id, v_correlation_id,
+                v_run_id, 'REFERENCE', v_stg_record_id, v_correlation_id,
                 'ACCEPTED', 'Validated and upserted into ODS'
             );
             v_accepted := v_accepted + 1;
@@ -240,11 +242,13 @@ BEGIN
             WHERE stg_record_id = v_stg_record_id;
 
             INSERT INTO rejected.record (
-                run_id, stg_record_id, source_name, source_object,
+                run_id, record_type, stg_reference_record_id,
+                source_name, source_object,
                 entity_type, source_record_id, payload, correlation_id,
                 error_code, error_text
             ) VALUES (
                 v_run_id,
+                'REFERENCE',
                 v_stg_record_id,
                 COALESCE(NULLIF(p_document->>'source_system', ''), 'UNKNOWN'),
                 p_source_object,
@@ -257,9 +261,10 @@ BEGIN
             );
 
             INSERT INTO audit.record_processing (
-                run_id, stg_record_id, correlation_id, outcome, detail
+                run_id, record_type, stg_reference_record_id,
+                correlation_id, outcome, detail
             ) VALUES (
-                v_run_id, v_stg_record_id, v_correlation_id,
+                v_run_id, 'REFERENCE', v_stg_record_id, v_correlation_id,
                 'REJECTED', SQLSTATE || ': ' || SQLERRM
             );
             v_rejected := v_rejected + 1;
