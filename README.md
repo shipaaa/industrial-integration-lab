@@ -131,16 +131,9 @@ The completed portfolio project will include:
 
 ## Current Work
 
-Stage 0 must be reviewed and agreed before code or infrastructure implementation starts. The immediate deliverables are:
-
-- project charter and business scenario;
-- discovery questions;
-- functional and non-functional requirements;
-- assumptions, constraints, and out-of-scope items;
-- measurable acceptance criteria;
-- source contracts for REST, CSV, JSON, and Kafka;
-- initial dimensional model with declared grains;
-- documentation structure for the implementation lifecycle.
+Reference ingestion and the telemetry source/database contracts are implemented.
+The next delivery step is the NiFi telemetry process group that reads the API,
+calls the page-level PostgreSQL contract, and persists its composite watermark.
 
 ## Technology Stack
 
@@ -151,7 +144,9 @@ Stage 0 must be reviewed and agreed before code or infrastructure implementation
 - **Runtime:** Docker Compose, Linux containers
 - **Documentation:** Markdown, Mermaid diagrams
 
-## First Vertical Slice
+## Implemented Vertical Slices
+
+### Reference data
 
 The current slice loads one plant, one line, one extruder, two materials, and
 three production batches from JSON into PostgreSQL. It preserves the raw record,
@@ -176,3 +171,21 @@ architecture calls the same `ods.load_reference_document` function from NiFi.
 
 Architecture decisions are recorded in [`docs/adr`](docs/adr), and the current
 solution design is in [`docs/04-solution-design.md`](docs/04-solution-design.md).
+
+### Telemetry
+
+The FastAPI simulator exposes deterministic, paginated telemetry with timeout,
+HTTP 500, and duplicate scenarios. PostgreSQL processes one API page per
+transaction, validates measurements against batch and material data, preserves
+rejected records, calculates deviations, advances a composite watermark, and
+reconciles every page.
+
+```bash
+make start-api
+make test-api
+make test-telemetry-db
+```
+
+The telemetry database test proves initial acceptance, safe replay, duplicate
+handling, rejection of unknown equipment, and the `BATCH-003` temperature
+deviation.
