@@ -6,9 +6,9 @@ Portfolio-grade industrial data integration project demonstrating how equipment 
 
 The lab is designed to demonstrate the practical responsibilities of a Middle Technical Implementation Engineer: discovery, source analysis, solution design, data mapping, integration development, testing, deployment planning, troubleshooting, and operational handover.
 
-> **Project status:** Stage 1 — Platform Foundation. ADR-001 is accepted and the
-> reference-data vertical slice is implemented as an executable database
-> contract. NiFi deployment is the next architecture gate.
+> **Project status:** Stage 2 — Platform Foundation. Reference and telemetry
+> contracts are executable, and the NiFi telemetry process group is reproducibly
+> provisioned from Git.
 
 ## Business Scenario
 
@@ -132,7 +132,7 @@ The completed portfolio project will include:
 ## Current Work
 
 Reference ingestion and the telemetry source/database contracts are implemented.
-The next delivery step is the NiFi telemetry process group that reads the API,
+The current delivery adds the NiFi telemetry process group that reads the API,
 calls the page-level PostgreSQL contract, and persists its composite watermark.
 
 ## Technology Stack
@@ -189,3 +189,20 @@ make test-telemetry-db
 The telemetry database test proves initial acceptance, safe replay, duplicate
 handling, rejection of unknown equipment, and the `BATCH-003` temperature
 deviation.
+
+### NiFi telemetry orchestration
+
+NiFi 2.10.0 is built with a pinned PostgreSQL JDBC driver. A source-controlled
+flow specification is provisioned through the REST API into a Parameter Context
+and process group. API and database retries are bounded independently, and the
+next page is requested only after the current database transaction succeeds.
+
+```bash
+make start-nifi
+make verify-nifi
+make replay-nifi
+```
+
+The first command can take several minutes while the NiFi image is downloaded.
+Operational details are in
+[`docs/07-runbooks/nifi-telemetry-flow.md`](docs/07-runbooks/nifi-telemetry-flow.md).

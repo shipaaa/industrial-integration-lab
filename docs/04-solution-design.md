@@ -37,11 +37,14 @@ The slice is complete when:
 4. `dm.dm_batch_investigation` returns one dossier row for `BATCH-003`;
 5. received equals accepted plus rejected plus duplicate for every load run.
 
-## Deferred decisions
+## NiFi deployment
 
-- NiFi version and flow deployment strategy;
-- whether flow definitions are promoted through NiFi Registry or imported
-  directly by a bootstrap client;
+The local MVP runs Apache NiFi 2.10.0 as one secure node. The telemetry process
+group is described by a declarative JSON specification in Git and provisioned
+through the NiFi REST API. A Parameter Context separates endpoints, credentials,
+page size, and retry policy from processor topology. A standalone NiFi Registry
+is not deployed because it is deprecated; the deployment decision is recorded
+in [`ADR-004`](adr/0004-nifi-telemetry-flow-deployment.md).
 
 REST watermark semantics are defined in
 [`ADR-002`](adr/0002-telemetry-watermark-and-pagination.md).
@@ -53,3 +56,9 @@ every delivery in STG, validates and deduplicates records into ODS, calculates
 material-range deviations, records reconciliation, and advances the composite
 watermark at the end of the transaction. The transaction boundary is defined
 in [`ADR-003`](adr/0003-telemetry-page-transaction.md).
+
+The process group reads the current composite watermark, calls the paginated API,
+retries HTTP and database technical failures independently, and follows
+`has_more` only after the database transaction succeeds. Business-invalid
+records remain a successful page outcome because PostgreSQL isolates them in
+`rejected.record` and reconciles the page.

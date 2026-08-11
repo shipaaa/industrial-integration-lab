@@ -1,0 +1,323 @@
+{
+  "schema_version": "1.0",
+  "nifi_version": "2.10.0",
+  "flow": {
+    "name": "Telemetry API Ingestion",
+    "version": "1.0",
+    "comments": "Managed from nifi/telemetry-flow.json. Loads deterministic API pages through ods.load_telemetry_page."
+  },
+  "parameter_context": {
+    "name": "PlantBridge Telemetry API",
+    "description": "Local MVP parameters for the telemetry API ingestion flow.",
+    "parameters": [
+      {
+        "name": "Telemetry API Base URL",
+        "value": "http://source-simulator:8000",
+        "sensitive": false
+      },
+      {
+        "name": "Telemetry Page Size",
+        "value": "10",
+        "sensitive": false
+      },
+      {
+        "name": "Telemetry Source Name",
+        "value": "EXTRUDER_SCADA",
+        "sensitive": false
+      },
+      {
+        "name": "Telemetry Source Object",
+        "value": "GET /telemetry",
+        "sensitive": false
+      },
+      {
+        "name": "PostgreSQL JDBC URL",
+        "value": "jdbc:postgresql://postgres:5432/plantbridge",
+        "sensitive": false
+      },
+      {
+        "name": "PostgreSQL User",
+        "value": "plantbridge",
+        "sensitive": false
+      },
+      {
+        "name": "PostgreSQL Password",
+        "value": "plantbridge_dev",
+        "sensitive": true
+      },
+      {
+        "name": "Maximum Retries",
+        "value": "3",
+        "sensitive": false
+      }
+    ]
+  },
+  "controller_services": [
+    {
+      "key": "postgres_pool",
+      "name": "PlantBridge PostgreSQL Pool",
+      "type": "org.apache.nifi.dbcp.DBCPConnectionPool",
+      "bundle": {
+        "group": "org.apache.nifi",
+        "artifact": "nifi-dbcp-service-nar",
+        "version": "2.10.0"
+      },
+      "properties": {
+        "Database Connection URL": "#{PostgreSQL JDBC URL}",
+        "Database Driver Class Name": "org.postgresql.Driver",
+        "Database Driver Location(s)": "/opt/nifi/nifi-current/lib/postgresql-42.7.13.jar",
+        "Database User": "#{PostgreSQL User}",
+        "Password": "#{PostgreSQL Password}",
+        "Validation Query": "SELECT 1"
+      }
+    },
+    {
+      "key": "json_writer",
+      "name": "Watermark JSON Writer",
+      "type": "org.apache.nifi.json.JsonRecordSetWriter",
+      "bundle": {
+        "group": "org.apache.nifi",
+        "artifact": "nifi-record-serialization-services-nar",
+        "version": "2.10.0"
+      },
+      "properties": {
+        "Schema Access Strategy": "inherit-record-schema",
+        "Schema Write Strategy": "no-schema",
+        "Output Grouping": "output-array",
+        "Pretty Print JSON": "false"
+      }
+    }
+  ],
+  "processors": [
+    {
+      "key": "trigger",
+      "name": "Trigger Telemetry Poll",
+      "type": "org.apache.nifi.processors.standard.GenerateFlowFile",
+      "bundle": "standard",
+      "position": [0, 0],
+      "scheduling_period": "5 min",
+      "auto_terminate": []
+    },
+    {
+      "key": "read_watermark",
+      "name": "Read Composite Watermark",
+      "type": "org.apache.nifi.processors.standard.ExecuteSQLRecord",
+      "bundle": "standard",
+      "position": [400, 0],
+      "properties": {
+        "Database Connection Pooling Service": "@service:postgres_pool",
+        "Record Writer": "@service:json_writer",
+        "SQL Query": "SELECT COALESCE((SELECT watermark_value FROM control.watermark WHERE source_name = '#{Telemetry Source Name}'), '1970-01-01T00:00:00Z') AS updated_since, COALESCE((SELECT watermark_record_id FROM control.watermark WHERE source_name = '#{Telemetry Source Name}'), '') AS after_record_id"
+      },
+      "auto_terminate": []
+    },
+    {
+      "key": "extract_watermark",
+      "name": "Extract Composite Watermark",
+      "type": "org.apache.nifi.processors.standard.EvaluateJsonPath",
+      "bundle": "standard",
+      "position": [800, 0],
+      "properties": {
+        "Destination": "flowfile-attribute",
+        "Return Type": "auto-detect",
+        "Path Not Found Behavior": "warn",
+        "telemetry.updated_since": "$[0].updated_since",
+        "telemetry.after_record_id": "$[0].after_record_id"
+      },
+      "auto_terminate": ["unmatched"]
+    },
+    {
+      "key": "build_request",
+      "name": "Build Telemetry Request",
+      "type": "org.apache.nifi.processors.attributes.UpdateAttribute",
+      "bundle": "update-attribute",
+      "position": [1200, 0],
+      "properties": {
+        "telemetry.request.url": "#{Telemetry API Base URL}/telemetry?updated_since=${telemetry.updated_since:urlEncode()}&after_record_id=${telemetry.after_record_id:urlEncode()}&page_size=#{Telemetry Page Size}"
+      },
+      "auto_terminate": []
+    },
+    {
+      "key": "invoke_api",
+      "name": "Invoke Telemetry API",
+      "type": "org.apache.nifi.processors.standard.InvokeHTTP",
+      "bundle": "standard",
+      "position": [1600, 0],
+      "properties": {
+        "HTTP Method": "GET",
+        "HTTP URL": "${telemetry.request.url}",
+        "Connection Timeout": "3 secs",
+        "Socket Read Timeout": "3 secs",
+        "Response Body Ignored": "false",
+        "Response Generation Required": "false"
+      },
+      "auto_terminate": ["Original"]
+    },
+    {
+      "key": "retry_api",
+      "name": "Retry Source Request",
+      "type": "org.apache.nifi.processors.standard.RetryFlowFile",
+      "bundle": "standard",
+      "position": [1600, 400],
+      "properties": {
+        "Retry Attribute": "telemetry.http.retry.count",
+        "Maximum Retries": "#{Maximum Retries}",
+        "Penalize Retries": "true",
+        "Reuse Mode": "fail"
+      },
+      "auto_terminate": []
+    },
+    {
+      "key": "extract_page",
+      "name": "Extract Page Control Fields",
+      "type": "org.apache.nifi.processors.standard.EvaluateJsonPath",
+      "bundle": "standard",
+      "position": [2000, 0],
+      "properties": {
+        "Destination": "flowfile-attribute",
+        "Return Type": "auto-detect",
+        "Path Not Found Behavior": "ignore",
+        "telemetry.has_more": "$.has_more",
+        "telemetry.next_updated_at": "$.next_watermark.updated_at",
+        "telemetry.next_record_id": "$.next_watermark.source_record_id",
+        "telemetry.record_count": "$.record_count"
+      },
+      "auto_terminate": ["unmatched"]
+    },
+    {
+      "key": "capture_page",
+      "name": "Capture Page Payload",
+      "type": "org.apache.nifi.processors.standard.ExtractText",
+      "bundle": "standard",
+      "position": [2400, 0],
+      "properties": {
+        "Character Set": "UTF-8",
+        "Maximum Capture Group Length": "1048576",
+        "telemetry.page": "(?s)(.*)"
+      },
+      "auto_terminate": []
+    },
+    {
+      "key": "prepare_db",
+      "name": "Prepare Page Transaction",
+      "type": "org.apache.nifi.processors.attributes.UpdateAttribute",
+      "bundle": "update-attribute",
+      "position": [2800, 0],
+      "properties": {
+        "sql.args.1.type": "12",
+        "sql.args.1.value": "${telemetry.page}",
+        "sql.args.2.type": "12",
+        "sql.args.2.value": "#{Telemetry Source Name}",
+        "sql.args.3.type": "12",
+        "sql.args.3.value": "#{Telemetry Source Object}"
+      },
+      "auto_terminate": []
+    },
+    {
+      "key": "load_page",
+      "name": "Load Telemetry Page",
+      "type": "org.apache.nifi.processors.standard.ExecuteSQL",
+      "bundle": "standard",
+      "position": [3200, 0],
+      "properties": {
+        "Database Connection Pooling Service": "@service:postgres_pool",
+        "SQL Query": "SELECT ods.load_telemetry_page(?::jsonb, ?::text, ?::text)",
+        "Max Rows Per FlowFile": "1",
+        "Set Auto Commit": "true"
+      },
+      "auto_terminate": []
+    },
+    {
+      "key": "retry_db",
+      "name": "Retry Database Transaction",
+      "type": "org.apache.nifi.processors.standard.RetryFlowFile",
+      "bundle": "standard",
+      "position": [3200, 400],
+      "properties": {
+        "Retry Attribute": "telemetry.db.retry.count",
+        "Maximum Retries": "#{Maximum Retries}",
+        "Penalize Retries": "true",
+        "Reuse Mode": "fail"
+      },
+      "auto_terminate": []
+    },
+    {
+      "key": "route_more",
+      "name": "Continue While Has More",
+      "type": "org.apache.nifi.processors.standard.RouteOnAttribute",
+      "bundle": "standard",
+      "position": [3600, 0],
+      "properties": {
+        "Routing Strategy": "Route to Property name",
+        "continue": "${telemetry.has_more:equals('true')}"
+      },
+      "auto_terminate": []
+    },
+    {
+      "key": "prepare_next",
+      "name": "Advance Request Watermark",
+      "type": "org.apache.nifi.processors.attributes.UpdateAttribute",
+      "bundle": "update-attribute",
+      "position": [3600, -400],
+      "properties": {
+        "telemetry.updated_since": "${telemetry.next_updated_at}",
+        "telemetry.after_record_id": "${telemetry.next_record_id}",
+        "telemetry.http.retry.count": "0",
+        "telemetry.db.retry.count": "0"
+      },
+      "auto_terminate": []
+    },
+    {
+      "key": "complete",
+      "name": "Log Completed Poll",
+      "type": "org.apache.nifi.processors.standard.LogAttribute",
+      "bundle": "standard",
+      "position": [4000, 0],
+      "properties": {
+        "Log Level": "info",
+        "Log Payload": "false"
+      },
+      "auto_terminate": ["success"]
+    },
+    {
+      "key": "failure",
+      "name": "Log Technical Failure",
+      "type": "org.apache.nifi.processors.standard.LogAttribute",
+      "bundle": "standard",
+      "position": [4000, 400],
+      "properties": {
+        "Log Level": "error",
+        "Log Payload": "true"
+      },
+      "auto_terminate": ["success"]
+    }
+  ],
+  "connections": [
+    ["trigger", "success", "read_watermark"],
+    ["read_watermark", "success", "extract_watermark"],
+    ["read_watermark", "failure", "failure"],
+    ["extract_watermark", "matched", "build_request"],
+    ["extract_watermark", "failure", "failure"],
+    ["build_request", "success", "invoke_api"],
+    ["invoke_api", "response", "extract_page"],
+    ["invoke_api", "retry", "retry_api"],
+    ["invoke_api", "failure", "retry_api"],
+    ["invoke_api", "no retry", "failure"],
+    ["retry_api", "retry", "invoke_api"],
+    ["retry_api", "retries_exceeded", "failure"],
+    ["retry_api", "failure", "failure"],
+    ["extract_page", "matched", "capture_page"],
+    ["extract_page", "failure", "failure"],
+    ["capture_page", "matched", "prepare_db"],
+    ["capture_page", "unmatched", "failure"],
+    ["prepare_db", "success", "load_page"],
+    ["load_page", "success", "route_more"],
+    ["load_page", "failure", "retry_db"],
+    ["retry_db", "retry", "load_page"],
+    ["retry_db", "retries_exceeded", "failure"],
+    ["retry_db", "failure", "failure"],
+    ["route_more", "continue", "prepare_next"],
+    ["route_more", "unmatched", "complete"],
+    ["prepare_next", "success", "build_request"]
+  ]
+}
