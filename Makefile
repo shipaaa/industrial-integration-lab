@@ -1,10 +1,23 @@
-.PHONY: start start-api stop load-reference replay-reference verify-reference migrate-telemetry load-telemetry verify-telemetry replay-telemetry test test-api test-telemetry-db test-postgres-local
+.PHONY: start start-api start-nifi bootstrap-nifi verify-nifi replay-nifi stop load-reference replay-reference verify-reference migrate-telemetry load-telemetry verify-telemetry replay-telemetry test test-api test-telemetry-db test-postgres-local
 
 start:
 	docker compose up --detach --wait postgres
 
 start-api:
 	docker compose up --detach --build --wait source-simulator
+
+start-nifi:
+	docker compose up --detach --build --wait postgres source-simulator nifi
+	./scripts/bootstrap-nifi.py
+
+bootstrap-nifi:
+	./scripts/bootstrap-nifi.py
+
+verify-nifi:
+	./scripts/verify-nifi-telemetry.sh
+
+replay-nifi:
+	./scripts/replay-nifi-telemetry.sh
 
 stop:
 	docker compose down
