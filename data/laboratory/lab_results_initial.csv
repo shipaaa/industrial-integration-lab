@@ -1,0 +1,2 @@
+lab_result_id,result_version,batch_id,test_code,test_name,result_value,unit,min_limit,max_limit,result_status,tested_at
+LAB-003,1,BATCH-003,MELT_FLOW_INDEX,Melt Flow Index,18.2,g/10min,10.0,15.0,PASS,2026-07-15T13:10:00Z

@@ -1,0 +1,2 @@
+lab_result_id,result_version,batch_id,test_code,test_name,result_value,unit,min_limit,max_limit,result_status,tested_at
+LAB-001,1,BATCH-001,MOISTURE,Moisture,0.12,percent,0.00,0.20,PASS,2026-07-15T07:15:00Z
