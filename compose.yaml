@@ -33,6 +33,7 @@ services:
       - ./db/test:/db/test:ro
       - ./data/reference:/reference:ro
       - ./data/telemetry:/telemetry:ro
+      - ./data/laboratory:/laboratory:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U plantbridge -d plantbridge"]
       interval: 5s
