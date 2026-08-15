@@ -6,9 +6,9 @@ Portfolio-grade industrial data integration project demonstrating how equipment 
 
 The lab is designed to demonstrate the practical responsibilities of a Middle Technical Implementation Engineer: discovery, source analysis, solution design, data mapping, integration development, testing, deployment planning, troubleshooting, and operational handover.
 
-> **Project status:** Stage 2 — Platform Foundation. Reference and telemetry
-> contracts are executable, and the NiFi telemetry process group is reproducibly
-> provisioned from Git.
+> **Project status:** Stage 3 — Integration Implementation. Reference,
+> telemetry, and laboratory CSV contracts are executable; the NiFi telemetry
+> process group is reproducibly provisioned from Git.
 
 ## Business Scenario
 
@@ -131,9 +131,10 @@ The completed portfolio project will include:
 
 ## Current Work
 
-Reference ingestion and the telemetry source/database contracts are implemented.
-The current delivery adds the NiFi telemetry process group that reads the API,
-calls the page-level PostgreSQL contract, and persists its composite watermark.
+Reference ingestion, telemetry API/database ingestion, and the NiFi telemetry
+process group are implemented. The current delivery adds versioned laboratory
+CSV ingestion, invalid-row isolation, controlled correction replay, and the
+laboratory status in the BATCH-003 investigation dossier.
 
 ## Technology Stack
 
@@ -206,3 +207,24 @@ make replay-nifi
 The first command can take several minutes while the NiFi image is downloaded.
 Operational details are in
 [`docs/07-runbooks/nifi-telemetry-flow.md`](docs/07-runbooks/nifi-telemetry-flow.md).
+
+### Laboratory CSV
+
+The laboratory slice loads versioned CSV results at file-transaction grain.
+Every row is preserved in STG, validated independently, reconciled, and either
+stored in ODS or routed to rejected records. ODS keeps the latest accepted
+version; file repeats and stale versions cannot overwrite it.
+
+The MVP demonstrates an invalid BATCH-003 Melt Flow Index result marked `PASS`,
+then accepts version 2 marked `FAIL` and links the successful correction to the
+original rejection.
+
+```bash
+make test-laboratory-db
+```
+
+After the test, `dm.dm_batch_investigation` reports laboratory status `FAIL`
+for BATCH-003. The CSV contract and replay rules are documented in
+[`docs/05-source-contracts/laboratory-csv.md`](docs/05-source-contracts/laboratory-csv.md).
+The operator procedure is in
+[`docs/07-runbooks/laboratory-csv-replay.md`](docs/07-runbooks/laboratory-csv-replay.md).

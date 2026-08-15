@@ -1,4 +1,4 @@
-.PHONY: start start-api start-nifi bootstrap-nifi verify-nifi replay-nifi stop load-reference replay-reference verify-reference migrate-telemetry load-telemetry verify-telemetry replay-telemetry test test-api test-telemetry-db test-postgres-local
+.PHONY: start start-api start-nifi bootstrap-nifi verify-nifi replay-nifi stop load-reference replay-reference verify-reference migrate-telemetry load-telemetry verify-telemetry replay-telemetry migrate-laboratory load-laboratory-valid load-laboratory-initial replay-laboratory verify-laboratory test test-api test-telemetry-db test-laboratory-db test-postgres-local
 
 start:
 	docker compose up --detach --wait postgres
@@ -42,6 +42,21 @@ verify-telemetry:
 replay-telemetry: load-telemetry
 	docker compose exec -T postgres psql --username plantbridge --dbname plantbridge --set ON_ERROR_STOP=1 --file /db/test/verify_telemetry_replay.sql
 
+migrate-laboratory:
+	./scripts/apply-laboratory-db.sh
+
+load-laboratory-valid:
+	./scripts/load-laboratory.sh data/laboratory/lab_results_valid.csv
+
+load-laboratory-initial:
+	./scripts/load-laboratory.sh data/laboratory/lab_results_initial.csv
+
+replay-laboratory:
+	./scripts/replay-laboratory.sh
+
+verify-laboratory:
+	./scripts/verify-laboratory.sh
+
 test:
 	python3 -m unittest discover --start-directory tests --verbose
 
@@ -51,6 +66,9 @@ test-api:
 
 test-telemetry-db:
 	./scripts/test-telemetry-db.sh
+
+test-laboratory-db:
+	./scripts/test-laboratory-db.sh
 
 test-postgres-local:
 	./scripts/test-postgres-local.sh

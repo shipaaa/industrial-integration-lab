@@ -62,3 +62,21 @@ retries HTTP and database technical failures independently, and follows
 `has_more` only after the database transaction succeeds. Business-invalid
 records remain a successful page outcome because PostgreSQL isolates them in
 `rejected.record` and reconciles the page.
+
+## Laboratory database slice
+
+The temporary shell adapter converts one strict CSV file into a JSONB row array
+and calls `ods.load_laboratory_file`. NiFi will reuse that database contract in
+a separate orchestration slice. PostgreSQL identifies delivery rows by
+`file_checksum + row_number`, preserves every attempt in STG, and validates
+each row inside the file transaction.
+
+`lab_result_id` is the ODS business key. A correction must carry a higher
+`result_version`; ODS stores only the latest accepted version. Rejected source
+payloads remain immutable, while `rejected.replay_history` links a successful
+corrected run to its original rejection. Version and replay semantics are
+defined in [`ADR-005`](adr/0005-laboratory-versioning-and-replay.md).
+
+The investigation mart derives batch laboratory status from current results:
+any failed result makes the batch `FAIL`, all accepted results passing makes it
+`PASS`, and a batch without accepted results has no laboratory status.
