@@ -80,3 +80,16 @@ defined in [`ADR-005`](adr/0005-laboratory-versioning-and-replay.md).
 The investigation mart derives batch laboratory status from current results:
 any failed result makes the batch `FAIL`, all accepted results passing makes it
 `PASS`, and a batch without accepted results has no laboratory status.
+
+## NiFi laboratory orchestration
+
+The `Laboratory CSV Ingestion` process group reads source-controlled CSV files
+from a read-only mount, validates the exact header, calculates the original file
+SHA-256, converts records to JSON, and calls `ods.load_laboratory_csv` with
+prepared parameters. The adapter adds physical CSV row numbers before delegating
+to the stable file-level database contract.
+
+Primary ingestion and correction replay use separate manual triggers. Bootstrap
+starts the downstream graph but leaves both triggers stopped, so provisioning
+cannot apply a correction. The controlled replay decision is recorded in
+[`ADR-006`](adr/0006-controlled-nifi-laboratory-replay.md).
