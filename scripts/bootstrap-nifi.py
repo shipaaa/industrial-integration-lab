@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create the versioned telemetry process group through the NiFi REST API."""
+"""Create a source-controlled process group through the NiFi REST API."""
 
 from __future__ import annotations
 
@@ -188,7 +188,7 @@ def create_process_group(
         existing_comments = existing.get("component", {}).get("comments", "")
         if digest not in existing_comments:
             raise NifiError(
-                "The existing telemetry process group was created from another "
+                f"The existing {flow['name']} process group was created from another "
                 "specification. Reset the NiFi volumes before provisioning this version."
             )
         return existing
@@ -276,7 +276,14 @@ def wait_for_services(
     while pending and time.monotonic() < deadline:
         for service_id in list(pending):
             entity = client.request("GET", f"/controller-services/{service_id}")
-            if entity.get("component", {}).get("state") == "ENABLED":
+            component = entity.get("component", {})
+            if component.get("validationStatus") == "INVALID":
+                errors = "; ".join(component.get("validationErrors", []))
+                raise NifiError(
+                    f"Controller service {component.get('name', service_id)} "
+                    f"is invalid: {errors}"
+                )
+            if component.get("state") == "ENABLED":
                 pending.remove(service_id)
         if pending:
             time.sleep(2)
@@ -307,7 +314,9 @@ def create_processors(
                         "properties": resolve_service_references(
                             item.get("properties", {}), services
                         ),
-                        "schedulingStrategy": "TIMER_DRIVEN",
+                        "schedulingStrategy": item.get(
+                            "scheduling_strategy", "TIMER_DRIVEN"
+                        ),
                         "schedulingPeriod": item.get("scheduling_period", "0 sec"),
                         "concurrentlySchedulableTaskCount": 1,
                         "executionNode": "ALL",
@@ -390,7 +399,7 @@ def validate_existing_group(
     missing = expected - actual
     if missing:
         raise NifiError(
-            "Existing telemetry group is incomplete; missing processors: "
+            "Existing process group is incomplete; missing processors: "
             + ", ".join(sorted(missing))
         )
 
@@ -426,7 +435,7 @@ def validate_existing_group(
             )
     if missing_connections:
         raise NifiError(
-            "Existing telemetry group is incomplete; reset the NiFi flow volume. "
+            "Existing process group is incomplete; reset the NiFi flow volume. "
             "Missing connections: " + ", ".join(missing_connections)
         )
 
@@ -437,6 +446,29 @@ def start_process_group(client: NifiClient, group_id: str) -> None:
         f"/flow/process-groups/{group_id}",
         payload={"id": group_id, "state": "RUNNING"},
     )
+
+
+def start_configured_processors(
+    client: NifiClient, group_id: str, spec: dict[str, Any]
+) -> None:
+    manual_triggers = set(spec["flow"].get("manual_triggers", []))
+    if not manual_triggers:
+        start_process_group(client, group_id)
+        return
+
+    for entity in group_processors(client, group_id):
+        component = entity["component"]
+        expected_state = (
+            "STOPPED" if component["name"] in manual_triggers else "RUNNING"
+        )
+        if component.get("state") == expected_state:
+            continue
+        client.request(
+            "PUT",
+            f"/processors/{entity['id']}/run-status",
+            payload={"revision": revision(entity), "state": expected_state},
+        )
+        wait_for_processor_state(client, entity["id"], expected_state)
 
 
 def wait_for_processor_state(
@@ -505,8 +537,8 @@ def provision(client: NifiClient, spec_path: Path) -> str:
     group_id = group.get("id") or group["component"]["id"]
     if existing is not None:
         validate_existing_group(client, group_id, spec)
-        start_process_group(client, group_id)
         validate_processors(client, group_id)
+        start_configured_processors(client, group_id, spec)
         return group_id
 
     services = create_controller_services(client, group_id, spec)
@@ -514,7 +546,7 @@ def provision(client: NifiClient, spec_path: Path) -> str:
     processors = create_processors(client, group_id, spec, services)
     create_connections(client, group_id, spec, processors)
     validate_processors(client, group_id)
-    start_process_group(client, group_id)
+    start_configured_processors(client, group_id, spec)
     return group_id
 
 
@@ -538,6 +570,10 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Stop the periodic trigger and request one immediate poll",
     )
+    parser.add_argument(
+        "--trigger",
+        help="Processor name to run once; defaults to flow.run_once_trigger",
+    )
     return parser.parse_args()
 
 
@@ -545,17 +581,23 @@ def main() -> int:
     args = parse_args()
     client = NifiClient(args.url, args.username, args.password)
     try:
+        spec = load_spec(args.spec)
         client.wait_until_ready(args.wait_seconds)
         group_id = provision(client, args.spec)
         if args.run_once:
-            processor_id = run_trigger_once(
-                client, group_id, "Trigger Telemetry Poll"
-            )
-            print(f"Telemetry trigger requested once: {processor_id}")
+            trigger_name = args.trigger or spec["flow"].get("run_once_trigger")
+            if trigger_name is None and args.spec.resolve() == DEFAULT_SPEC.resolve():
+                trigger_name = "Trigger Telemetry Poll"
+            if not trigger_name:
+                raise NifiError(
+                    "--run-once requires --trigger or flow.run_once_trigger"
+                )
+            processor_id = run_trigger_once(client, group_id, trigger_name)
+            print(f"{trigger_name} requested once: {processor_id}")
     except (NifiError, OSError, json.JSONDecodeError, KeyError) as error:
         print(f"NiFi bootstrap failed: {error}", file=sys.stderr)
         return 1
-    print(f"Telemetry process group is provisioned and running: {group_id}")
+    print(f"{spec['flow']['name']} process group is provisioned: {group_id}")
     return 0
 
 
