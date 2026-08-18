@@ -1,4 +1,4 @@
-.PHONY: start start-api start-nifi bootstrap-nifi verify-nifi replay-nifi stop load-reference replay-reference verify-reference migrate-telemetry load-telemetry verify-telemetry replay-telemetry migrate-laboratory load-laboratory-valid load-laboratory-initial replay-laboratory verify-laboratory test test-api test-telemetry-db test-laboratory-db test-postgres-local
+.PHONY: start start-api start-nifi bootstrap-nifi bootstrap-nifi-laboratory verify-nifi replay-nifi load-nifi-laboratory replay-nifi-laboratory verify-nifi-laboratory test-nifi-laboratory stop load-reference replay-reference verify-reference migrate-telemetry load-telemetry verify-telemetry replay-telemetry migrate-laboratory load-laboratory-valid load-laboratory-initial replay-laboratory verify-laboratory test test-api test-telemetry-db test-laboratory-db test-postgres-local
 
 start:
 	docker compose up --detach --wait postgres
@@ -9,15 +9,34 @@ start-api:
 start-nifi:
 	docker compose up --detach --build --wait postgres source-simulator nifi
 	./scripts/bootstrap-nifi.py
+	./scripts/bootstrap-nifi-laboratory.sh
 
 bootstrap-nifi:
 	./scripts/bootstrap-nifi.py
+	./scripts/bootstrap-nifi-laboratory.sh
+
+bootstrap-nifi-laboratory:
+	./scripts/bootstrap-nifi-laboratory.sh
 
 verify-nifi:
 	./scripts/verify-nifi-telemetry.sh
 
 replay-nifi:
 	./scripts/replay-nifi-telemetry.sh
+
+load-nifi-laboratory:
+	./scripts/run-nifi-laboratory-primary.sh
+	./scripts/verify-nifi-laboratory-initial.sh
+
+replay-nifi-laboratory:
+	./scripts/replay-nifi-laboratory.sh
+	./scripts/verify-nifi-laboratory.sh
+
+verify-nifi-laboratory:
+	./scripts/verify-nifi-laboratory.sh
+
+test-nifi-laboratory:
+	./scripts/test-nifi-laboratory.sh
 
 stop:
 	docker compose down
