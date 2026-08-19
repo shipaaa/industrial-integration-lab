@@ -1,0 +1,417 @@
+{
+  "schema_version": "1.0",
+  "nifi_version": "2.10.0",
+  "flow": {
+    "name": "Laboratory CSV Ingestion",
+    "version": "1.0",
+    "run_once_trigger": "Trigger Laboratory Primary Load",
+    "manual_triggers": [
+      "Trigger Laboratory Primary Load",
+      "Trigger Laboratory Correction Replay"
+    ],
+    "comments": "Managed from nifi/laboratory-flow.json. Loads strict CSV fixtures through ods.load_laboratory_csv with an explicit correction replay path."
+  },
+  "parameter_context": {
+    "name": "PlantBridge Laboratory CSV",
+    "description": "Local MVP parameters for laboratory CSV ingestion and controlled replay.",
+    "parameters": [
+      {
+        "name": "Laboratory Input Directory",
+        "value": "/opt/nifi/laboratory",
+        "sensitive": false
+      },
+      {
+        "name": "Laboratory CSV Header",
+        "value": "lab_result_id,result_version,batch_id,test_code,test_name,result_value,unit,min_limit,max_limit,result_status,tested_at",
+        "sensitive": false
+      },
+      {
+        "name": "Laboratory Source Name",
+        "value": "LAB_LIMS_NIFI",
+        "sensitive": false
+      },
+      {
+        "name": "PostgreSQL JDBC URL",
+        "value": "jdbc:postgresql://postgres:5432/plantbridge",
+        "sensitive": false
+      },
+      {
+        "name": "PostgreSQL User",
+        "value": "plantbridge",
+        "sensitive": false
+      },
+      {
+        "name": "PostgreSQL Password",
+        "value": "plantbridge_dev",
+        "sensitive": true
+      },
+      {
+        "name": "Maximum Retries",
+        "value": "3",
+        "sensitive": false
+      }
+    ]
+  },
+  "controller_services": [
+    {
+      "key": "postgres_pool",
+      "name": "Laboratory PostgreSQL Pool",
+      "type": "org.apache.nifi.dbcp.DBCPConnectionPool",
+      "bundle": {
+        "group": "org.apache.nifi",
+        "artifact": "nifi-dbcp-service-nar",
+        "version": "2.10.0"
+      },
+      "properties": {
+        "Database Connection URL": "#{PostgreSQL JDBC URL}",
+        "Database Driver Class Name": "org.postgresql.Driver",
+        "Database Driver Location(s)": "/opt/nifi/nifi-current/lib/postgresql-42.7.13.jar",
+        "Database User": "#{PostgreSQL User}",
+        "Password": "#{PostgreSQL Password}",
+        "Validation Query": "SELECT 1"
+      }
+    },
+    {
+      "key": "csv_reader",
+      "name": "Laboratory CSV Reader",
+      "type": "org.apache.nifi.csv.CSVReader",
+      "bundle": {
+        "group": "org.apache.nifi",
+        "artifact": "nifi-record-serialization-services-nar",
+        "version": "2.10.0"
+      },
+      "properties": {
+        "Schema Access Strategy": "csv-header-derived",
+        "CSV Format": "rfc-4180",
+        "Treat First Line as Header": "true",
+        "Trim Double Quote": "false"
+      }
+    },
+    {
+      "key": "json_writer",
+      "name": "Laboratory JSON Writer",
+      "type": "org.apache.nifi.json.JsonRecordSetWriter",
+      "bundle": {
+        "group": "org.apache.nifi",
+        "artifact": "nifi-record-serialization-services-nar",
+        "version": "2.10.0"
+      },
+      "properties": {
+        "Schema Access Strategy": "inherit-record-schema",
+        "Schema Write Strategy": "no-schema",
+        "Output Grouping": "output-array",
+        "Pretty Print JSON": "false"
+      }
+    }
+  ],
+  "processors": [
+    {
+      "key": "trigger_primary",
+      "name": "Trigger Laboratory Primary Load",
+      "type": "org.apache.nifi.processors.standard.GenerateFlowFile",
+      "bundle": "standard",
+      "position": [0, 0],
+      "scheduling_period": "1 day",
+      "properties": {
+        "Data Format": "Text",
+        "Custom Text": "[{\"filename\":\"lab_results_valid.csv\",\"absolute_path\":\"#{Laboratory Input Directory}\",\"replay_mode\":\"false\"},{\"filename\":\"lab_results_initial.csv\",\"absolute_path\":\"#{Laboratory Input Directory}\",\"replay_mode\":\"false\"}]"
+      },
+      "auto_terminate": []
+    },
+    {
+      "key": "trigger_replay",
+      "name": "Trigger Laboratory Correction Replay",
+      "type": "org.apache.nifi.processors.standard.GenerateFlowFile",
+      "bundle": "standard",
+      "position": [0, 500],
+      "scheduling_period": "1 day",
+      "properties": {
+        "Data Format": "Text",
+        "Custom Text": "[{\"filename\":\"lab_results_corrected.csv\",\"absolute_path\":\"#{Laboratory Input Directory}\",\"replay_mode\":\"true\"}]"
+      },
+      "auto_terminate": []
+    },
+    {
+      "key": "split_manifest",
+      "name": "Split Laboratory File Manifest",
+      "type": "org.apache.nifi.processors.standard.SplitJson",
+      "bundle": "standard",
+      "position": [400, 200],
+      "properties": {
+        "JsonPath Expression": "$[*]"
+      },
+      "auto_terminate": ["original"]
+    },
+    {
+      "key": "extract_file_attributes",
+      "name": "Extract Laboratory File Attributes",
+      "type": "org.apache.nifi.processors.standard.EvaluateJsonPath",
+      "bundle": "standard",
+      "position": [800, 200],
+      "properties": {
+        "Destination": "flowfile-attribute",
+        "Return Type": "auto-detect",
+        "Path Not Found Behavior": "warn",
+        "laboratory.filename": "$.filename",
+        "laboratory.absolute_path": "$.absolute_path",
+        "laboratory.replay_mode": "$.replay_mode"
+      },
+      "auto_terminate": ["unmatched"]
+    },
+    {
+      "key": "fetch_file",
+      "name": "Fetch Laboratory CSV",
+      "type": "org.apache.nifi.processors.standard.FetchFile",
+      "bundle": "standard",
+      "position": [1200, 200],
+      "properties": {
+        "File to Fetch": "${laboratory.absolute_path}/${laboratory.filename}",
+        "Completion Strategy": "None"
+      },
+      "auto_terminate": []
+    },
+    {
+      "key": "hash_file",
+      "name": "Calculate Laboratory File Checksum",
+      "type": "org.apache.nifi.processors.standard.CryptographicHashContent",
+      "bundle": "standard",
+      "position": [1600, 200],
+      "properties": {
+        "Hash Algorithm": "SHA-256",
+        "Fail When Content Empty": "true"
+      },
+      "auto_terminate": []
+    },
+    {
+      "key": "extract_header",
+      "name": "Extract Laboratory CSV Header",
+      "type": "org.apache.nifi.processors.standard.ExtractText",
+      "bundle": "standard",
+      "position": [2000, 200],
+      "properties": {
+        "Character Set": "UTF-8",
+        "Maximum Capture Group Length": "4096",
+        "laboratory.csv.header": "\\A([^\\r\\n]+)"
+      },
+      "auto_terminate": []
+    },
+    {
+      "key": "set_header_contract",
+      "name": "Set Laboratory Header Contract",
+      "type": "org.apache.nifi.processors.attributes.UpdateAttribute",
+      "bundle": "update-attribute",
+      "position": [2200, 200],
+      "properties": {
+        "laboratory.expected_header": "#{Laboratory CSV Header}"
+      },
+      "auto_terminate": []
+    },
+    {
+      "key": "validate_header",
+      "name": "Validate Laboratory CSV Header",
+      "type": "org.apache.nifi.processors.standard.RouteOnAttribute",
+      "bundle": "standard",
+      "position": [2400, 200],
+      "properties": {
+        "Routing Strategy": "Route to Property name",
+        "valid": "${laboratory.csv.header:equals(${laboratory.expected_header})}"
+      },
+      "auto_terminate": []
+    },
+    {
+      "key": "convert_csv",
+      "name": "Convert Laboratory CSV to JSON",
+      "type": "org.apache.nifi.processors.standard.ConvertRecord",
+      "bundle": "standard",
+      "position": [2800, 200],
+      "properties": {
+        "Record Reader": "@service:csv_reader",
+        "Record Writer": "@service:json_writer",
+        "Include Zero Record FlowFiles": "true"
+      },
+      "auto_terminate": []
+    },
+    {
+      "key": "capture_rows",
+      "name": "Capture Laboratory JSON Rows",
+      "type": "org.apache.nifi.processors.standard.ExtractText",
+      "bundle": "standard",
+      "position": [3200, 200],
+      "properties": {
+        "Character Set": "UTF-8",
+        "Maximum Capture Group Length": "1048576",
+        "laboratory.rows": "(?s)(.*)"
+      },
+      "auto_terminate": []
+    },
+    {
+      "key": "route_mode",
+      "name": "Route Laboratory Load Mode",
+      "type": "org.apache.nifi.processors.standard.RouteOnAttribute",
+      "bundle": "standard",
+      "position": [3600, 200],
+      "properties": {
+        "Routing Strategy": "Route to Property name",
+        "normal": "${laboratory.replay_mode:equals('false')}",
+        "replay": "${laboratory.replay_mode:equals('true')}"
+      },
+      "auto_terminate": []
+    },
+    {
+      "key": "prepare_normal",
+      "name": "Prepare Laboratory Load Transaction",
+      "type": "org.apache.nifi.processors.attributes.UpdateAttribute",
+      "bundle": "update-attribute",
+      "position": [4000, 0],
+      "properties": {
+        "sql.args.1.type": "12",
+        "sql.args.1.value": "${laboratory.rows}",
+        "sql.args.2.type": "12",
+        "sql.args.2.value": "#{Laboratory Source Name}",
+        "sql.args.3.type": "12",
+        "sql.args.3.value": "${laboratory.filename}",
+        "sql.args.4.type": "12",
+        "sql.args.4.value": "${'content_SHA-256'}"
+      },
+      "auto_terminate": []
+    },
+    {
+      "key": "prepare_replay",
+      "name": "Prepare Laboratory Replay Transaction",
+      "type": "org.apache.nifi.processors.attributes.UpdateAttribute",
+      "bundle": "update-attribute",
+      "position": [4000, 500],
+      "properties": {
+        "sql.args.1.type": "12",
+        "sql.args.1.value": "${laboratory.rows}",
+        "sql.args.2.type": "12",
+        "sql.args.2.value": "#{Laboratory Source Name}",
+        "sql.args.3.type": "12",
+        "sql.args.3.value": "${laboratory.filename}",
+        "sql.args.4.type": "12",
+        "sql.args.4.value": "${'content_SHA-256'}",
+        "sql.args.5.type": "12",
+        "sql.args.5.value": "${laboratory.rows}"
+      },
+      "auto_terminate": []
+    },
+    {
+      "key": "load_normal",
+      "name": "Load Laboratory CSV",
+      "type": "org.apache.nifi.processors.standard.ExecuteSQL",
+      "bundle": "standard",
+      "position": [4400, 0],
+      "properties": {
+        "Database Connection Pooling Service": "@service:postgres_pool",
+        "SQL Query": "SELECT ods.load_laboratory_csv(?::jsonb, ?::text, ?::text, ?::text)",
+        "Max Rows Per FlowFile": "1",
+        "Set Auto Commit": "true"
+      },
+      "auto_terminate": []
+    },
+    {
+      "key": "load_replay",
+      "name": "Replay Corrected Laboratory CSV",
+      "type": "org.apache.nifi.processors.standard.ExecuteSQL",
+      "bundle": "standard",
+      "position": [4400, 500],
+      "properties": {
+        "Database Connection Pooling Service": "@service:postgres_pool",
+        "SQL Query": "SELECT ods.load_laboratory_csv(?::jsonb, ?::text, ?::text, ?::text, COALESCE((SELECT rejected_record_id FROM rejected.record WHERE record_type = 'LABORATORY' AND source_record_id = ((?::jsonb)->0->>'lab_result_id') AND replay_status = 'PENDING' ORDER BY rejected_at DESC LIMIT 1), -1))",
+        "Max Rows Per FlowFile": "1",
+        "Set Auto Commit": "true"
+      },
+      "auto_terminate": []
+    },
+    {
+      "key": "retry_normal",
+      "name": "Retry Laboratory Load",
+      "type": "org.apache.nifi.processors.standard.RetryFlowFile",
+      "bundle": "standard",
+      "position": [4400, -400],
+      "properties": {
+        "Retry Attribute": "laboratory.db.retry.count",
+        "Maximum Retries": "#{Maximum Retries}",
+        "Penalize Retries": "true",
+        "Reuse Mode": "fail"
+      },
+      "auto_terminate": []
+    },
+    {
+      "key": "retry_replay",
+      "name": "Retry Laboratory Replay",
+      "type": "org.apache.nifi.processors.standard.RetryFlowFile",
+      "bundle": "standard",
+      "position": [4400, 900],
+      "properties": {
+        "Retry Attribute": "laboratory.replay.retry.count",
+        "Maximum Retries": "#{Maximum Retries}",
+        "Penalize Retries": "true",
+        "Reuse Mode": "fail"
+      },
+      "auto_terminate": []
+    },
+    {
+      "key": "complete",
+      "name": "Log Laboratory Load Complete",
+      "type": "org.apache.nifi.processors.standard.LogAttribute",
+      "bundle": "standard",
+      "position": [4800, 200],
+      "properties": {
+        "Log Level": "info",
+        "Log Payload": "false"
+      },
+      "auto_terminate": ["success"]
+    },
+    {
+      "key": "failure",
+      "name": "Log Laboratory Technical Failure",
+      "type": "org.apache.nifi.processors.standard.LogAttribute",
+      "bundle": "standard",
+      "position": [4800, 700],
+      "properties": {
+        "Log Level": "error",
+        "Log Payload": "true"
+      },
+      "auto_terminate": ["success"]
+    }
+  ],
+  "connections": [
+    ["trigger_primary", "success", "split_manifest"],
+    ["trigger_replay", "success", "split_manifest"],
+    ["split_manifest", "split", "extract_file_attributes"],
+    ["split_manifest", "failure", "failure"],
+    ["extract_file_attributes", "matched", "fetch_file"],
+    ["extract_file_attributes", "failure", "failure"],
+    ["fetch_file", "success", "hash_file"],
+    ["fetch_file", "not.found", "failure"],
+    ["fetch_file", "permission.denied", "failure"],
+    ["fetch_file", "failure", "failure"],
+    ["hash_file", "success", "extract_header"],
+    ["hash_file", "failure", "failure"],
+    ["extract_header", "matched", "set_header_contract"],
+    ["extract_header", "unmatched", "failure"],
+    ["set_header_contract", "success", "validate_header"],
+    ["validate_header", "valid", "convert_csv"],
+    ["validate_header", "unmatched", "failure"],
+    ["convert_csv", "success", "capture_rows"],
+    ["convert_csv", "failure", "failure"],
+    ["capture_rows", "matched", "route_mode"],
+    ["capture_rows", "unmatched", "failure"],
+    ["route_mode", "normal", "prepare_normal"],
+    ["route_mode", "replay", "prepare_replay"],
+    ["route_mode", "unmatched", "failure"],
+    ["prepare_normal", "success", "load_normal"],
+    ["prepare_replay", "success", "load_replay"],
+    ["load_normal", "success", "complete"],
+    ["load_normal", "failure", "retry_normal"],
+    ["retry_normal", "retry", "load_normal"],
+    ["retry_normal", "retries_exceeded", "failure"],
+    ["retry_normal", "failure", "failure"],
+    ["load_replay", "success", "complete"],
+    ["load_replay", "failure", "retry_replay"],
+    ["retry_replay", "retry", "load_replay"],
+    ["retry_replay", "retries_exceeded", "failure"],
+    ["retry_replay", "failure", "failure"]
+  ]
+}

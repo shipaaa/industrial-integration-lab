@@ -8,7 +8,7 @@ The lab is designed to demonstrate the practical responsibilities of a Middle Te
 
 > **Project status:** Stage 3 — Integration Implementation. Reference,
 > telemetry, and laboratory CSV contracts are executable; the NiFi telemetry
-> process group is reproducibly provisioned from Git.
+> and laboratory process groups are reproducibly provisioned from Git.
 
 ## Business Scenario
 
@@ -131,10 +131,10 @@ The completed portfolio project will include:
 
 ## Current Work
 
-Reference ingestion, telemetry API/database ingestion, and the NiFi telemetry
-process group are implemented. The current delivery adds versioned laboratory
-CSV ingestion, invalid-row isolation, controlled correction replay, and the
-laboratory status in the BATCH-003 investigation dossier.
+Reference ingestion, telemetry API/database ingestion, versioned laboratory CSV
+ingestion, and both NiFi process groups are implemented. The current delivery
+adds NiFi header validation, file checksums, manual correction replay, and
+end-to-end idempotency evidence for the BATCH-003 investigation dossier.
 
 ## Technology Stack
 
@@ -228,3 +228,19 @@ for BATCH-003. The CSV contract and replay rules are documented in
 [`docs/05-source-contracts/laboratory-csv.md`](docs/05-source-contracts/laboratory-csv.md).
 The operator procedure is in
 [`docs/07-runbooks/laboratory-csv-replay.md`](docs/07-runbooks/laboratory-csv-replay.md).
+
+### NiFi laboratory orchestration
+
+The source-controlled Laboratory CSV process group uses separate manual
+triggers for primary ingestion and correction replay. Provisioning starts the
+downstream graph but cannot load the corrected file automatically.
+
+```bash
+make start-nifi
+make test-nifi-laboratory
+```
+
+The test proves the initial LAB-003 rejection, the linked version-2 replay, and
+duplicate handling when the primary files are run again. Operational details
+are in
+[`docs/07-runbooks/nifi-laboratory-flow.md`](docs/07-runbooks/nifi-laboratory-flow.md).

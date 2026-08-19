@@ -52,3 +52,7 @@ ID with `lab_results_corrected.csv`. A successful database transaction:
   continuing with another file.
 
 The full reproducible exercise is `make test-laboratory-db`.
+
+For the NiFi-orchestrated path, including explicit manual triggers and
+provenance, use
+[`nifi-laboratory-flow.md`](nifi-laboratory-flow.md).
