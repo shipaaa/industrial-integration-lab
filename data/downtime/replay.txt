@@ -1,0 +1,2 @@
+EVT-DT-INVALID-START|{"schema_version":"1.0","source_system":"MAINTENANCE_CMS","event_id":"EVT-DT-INVALID-START","downtime_id":"DT-REPLAY","event_type":"DOWNTIME_STARTED","batch_id":"BATCH-001","equipment_id":"EXT-01","reason_code":"PLANNED_CLEANING","occurred_at":"2026-07-15T05:45:00Z"}
+EVT-DT-REPLAY-END|{"schema_version":"1.0","source_system":"MAINTENANCE_CMS","event_id":"EVT-DT-REPLAY-END","downtime_id":"DT-REPLAY","event_type":"DOWNTIME_ENDED","batch_id":"BATCH-001","equipment_id":"EXT-01","reason_code":"PLANNED_CLEANING","occurred_at":"2026-07-15T05:48:00Z"}

@@ -53,8 +53,14 @@ CREATE INDEX IF NOT EXISTS ix_laboratory_result_batch
 ALTER TABLE audit.record_processing
     ADD COLUMN IF NOT EXISTS stg_laboratory_record_id bigint;
 
+ALTER TABLE audit.record_processing
+    ADD COLUMN IF NOT EXISTS stg_downtime_event_record_id bigint;
+
 ALTER TABLE rejected.record
     ADD COLUMN IF NOT EXISTS stg_laboratory_record_id bigint;
+
+ALTER TABLE rejected.record
+    ADD COLUMN IF NOT EXISTS stg_downtime_event_record_id bigint;
 
 ALTER TABLE audit.record_processing
     DROP CONSTRAINT IF EXISTS record_processing_record_type_check,
@@ -63,22 +69,31 @@ ALTER TABLE audit.record_processing
 
 ALTER TABLE audit.record_processing
     ADD CONSTRAINT ck_audit_record_processing_record_type
-        CHECK (record_type IN ('REFERENCE', 'TELEMETRY', 'LABORATORY')),
+        CHECK (record_type IN ('REFERENCE', 'TELEMETRY', 'LABORATORY', 'DOWNTIME')),
     ADD CONSTRAINT ck_audit_record_processing_stg_type CHECK (
         (record_type = 'REFERENCE'
             AND stg_reference_record_id IS NOT NULL
             AND stg_telemetry_record_id IS NULL
-            AND stg_laboratory_record_id IS NULL)
+            AND stg_laboratory_record_id IS NULL
+            AND stg_downtime_event_record_id IS NULL)
         OR
         (record_type = 'TELEMETRY'
             AND stg_reference_record_id IS NULL
             AND stg_telemetry_record_id IS NOT NULL
-            AND stg_laboratory_record_id IS NULL)
+            AND stg_laboratory_record_id IS NULL
+            AND stg_downtime_event_record_id IS NULL)
         OR
         (record_type = 'LABORATORY'
             AND stg_reference_record_id IS NULL
             AND stg_telemetry_record_id IS NULL
-            AND stg_laboratory_record_id IS NOT NULL)
+            AND stg_laboratory_record_id IS NOT NULL
+            AND stg_downtime_event_record_id IS NULL)
+        OR
+        (record_type = 'DOWNTIME'
+            AND stg_reference_record_id IS NULL
+            AND stg_telemetry_record_id IS NULL
+            AND stg_laboratory_record_id IS NULL
+            AND stg_downtime_event_record_id IS NOT NULL)
     );
 
 ALTER TABLE rejected.record
@@ -88,22 +103,31 @@ ALTER TABLE rejected.record
 
 ALTER TABLE rejected.record
     ADD CONSTRAINT ck_rejected_record_record_type
-        CHECK (record_type IN ('REFERENCE', 'TELEMETRY', 'LABORATORY')),
+        CHECK (record_type IN ('REFERENCE', 'TELEMETRY', 'LABORATORY', 'DOWNTIME')),
     ADD CONSTRAINT ck_rejected_record_stg_type CHECK (
         (record_type = 'REFERENCE'
             AND stg_reference_record_id IS NOT NULL
             AND stg_telemetry_record_id IS NULL
-            AND stg_laboratory_record_id IS NULL)
+            AND stg_laboratory_record_id IS NULL
+            AND stg_downtime_event_record_id IS NULL)
         OR
         (record_type = 'TELEMETRY'
             AND stg_reference_record_id IS NULL
             AND stg_telemetry_record_id IS NOT NULL
-            AND stg_laboratory_record_id IS NULL)
+            AND stg_laboratory_record_id IS NULL
+            AND stg_downtime_event_record_id IS NULL)
         OR
         (record_type = 'LABORATORY'
             AND stg_reference_record_id IS NULL
             AND stg_telemetry_record_id IS NULL
-            AND stg_laboratory_record_id IS NOT NULL)
+            AND stg_laboratory_record_id IS NOT NULL
+            AND stg_downtime_event_record_id IS NULL)
+        OR
+        (record_type = 'DOWNTIME'
+            AND stg_reference_record_id IS NULL
+            AND stg_telemetry_record_id IS NULL
+            AND stg_laboratory_record_id IS NULL
+            AND stg_downtime_event_record_id IS NOT NULL)
     );
 
 DO $$
@@ -495,6 +519,33 @@ EXCEPTION WHEN OTHERS THEN
 END;
 $$;
 
+CREATE OR REPLACE FUNCTION dm.batch_downtime_minutes(p_batch_id text)
+RETURNS numeric
+LANGUAGE plpgsql
+STABLE
+AS $$
+DECLARE
+    v_minutes numeric;
+BEGIN
+    IF to_regclass('ods.downtime_incident') IS NULL THEN
+        RETURN 0;
+    END IF;
+
+    EXECUTE $query$
+        SELECT COALESCE(sum(
+            extract(epoch FROM ended_at - started_at) / 60
+        ), 0)::numeric
+        FROM ods.downtime_incident
+        WHERE batch_id = $1
+          AND status = 'COMPLETED'
+    $query$
+    INTO v_minutes
+    USING p_batch_id;
+
+    RETURN v_minutes;
+END;
+$$;
+
 CREATE OR REPLACE VIEW dm.dm_batch_investigation AS
 SELECT
     b.batch_id,
@@ -542,7 +593,7 @@ SELECT
         WHERE t.batch_id = b.batch_id
           AND t.is_deviation
     ) AS process_deviation_count,
-    0::numeric AS downtime_minutes
+    dm.batch_downtime_minutes(b.batch_id) AS downtime_minutes
 FROM ods.production_batch b
 JOIN ods.material m ON m.material_id = b.material_id
 JOIN ods.production_line l ON l.line_id = b.line_id

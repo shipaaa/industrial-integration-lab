@@ -93,3 +93,21 @@ Primary ingestion and correction replay use separate manual triggers. Bootstrap
 starts the downstream graph but leaves both triggers stopped, so provisioning
 cannot apply a correction. The controlled replay decision is recorded in
 [`ADR-006`](adr/0006-controlled-nifi-laboratory-replay.md).
+
+## Downtime Kafka contract slice
+
+The local MVP uses one Apache Kafka broker in combined KRaft mode. Separate
+primary, DLQ, and replay topics keep the normal event stream, business-invalid
+deliveries, and operator-approved corrections explicit.
+
+Downtime starts and ends are immutable events correlated by `downtime_id`.
+PostgreSQL preserves topic/partition/offset and payload in STG, uses `event_id`
+for idempotency, and assembles a current incident only after business
+validation. Completed incidents feed `dm.dm_batch_investigation`; open incidents
+remain visible without contributing duration.
+
+A temporary Python adapter consumes deterministic Kafka fixtures, calls the
+database transaction, and publishes `REJECTED` outcomes to the DLQ. The next
+slice will replace this adapter with a source-controlled NiFi process group
+without changing the event or database contracts. Correlation rules are
+defined in [`ADR-007`](adr/0007-downtime-event-correlation.md).
