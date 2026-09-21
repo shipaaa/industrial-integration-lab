@@ -7,7 +7,8 @@ plantbridge_bootstrap_server="kafka:19092"
 for plantbridge_topic in \
   plantbridge.downtime.events \
   plantbridge.downtime.dlq \
-  plantbridge.downtime.replay
+  plantbridge.downtime.replay \
+  plantbridge.downtime.receipts
 do
   docker compose --project-directory "${plantbridge_project_dir}" exec -T kafka \
     /opt/kafka/bin/kafka-topics.sh \

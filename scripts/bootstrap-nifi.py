@@ -515,6 +515,29 @@ def run_trigger_once(client: NifiClient, group_id: str, trigger_name: str) -> st
     return processor_id
 
 
+def set_trigger_state(
+    client: NifiClient, group_id: str, trigger_name: str, state: str
+) -> str:
+    trigger = next(
+        (
+            entity
+            for entity in group_processors(client, group_id)
+            if entity.get("component", {}).get("name") == trigger_name
+        ),
+        None,
+    )
+    if trigger is None:
+        raise NifiError(f"Trigger processor not found: {trigger_name}")
+    if trigger["component"].get("state") != state:
+        client.request(
+            "PUT",
+            f"/processors/{trigger['id']}/run-status",
+            payload={"revision": revision(trigger), "state": state},
+        )
+        wait_for_processor_state(client, trigger["id"], state)
+    return trigger["id"]
+
+
 def validate_processors(client: NifiClient, group_id: str) -> None:
     invalid: list[str] = []
     for entity in group_processors(client, group_id):
@@ -574,6 +597,14 @@ def parse_args() -> argparse.Namespace:
         "--trigger",
         help="Processor name to run once; defaults to flow.run_once_trigger",
     )
+    parser.add_argument(
+        "--start-trigger",
+        help="Start one manual trigger continuously after provisioning",
+    )
+    parser.add_argument(
+        "--stop-trigger",
+        help="Stop one manual trigger after provisioning",
+    )
     return parser.parse_args()
 
 
@@ -594,6 +625,16 @@ def main() -> int:
                 )
             processor_id = run_trigger_once(client, group_id, trigger_name)
             print(f"{trigger_name} requested once: {processor_id}")
+        if args.start_trigger:
+            processor_id = set_trigger_state(
+                client, group_id, args.start_trigger, "RUNNING"
+            )
+            print(f"{args.start_trigger} started: {processor_id}")
+        if args.stop_trigger:
+            processor_id = set_trigger_state(
+                client, group_id, args.stop_trigger, "STOPPED"
+            )
+            print(f"{args.stop_trigger} stopped: {processor_id}")
     except (NifiError, OSError, json.JSONDecodeError, KeyError) as error:
         print(f"NiFi bootstrap failed: {error}", file=sys.stderr)
         return 1

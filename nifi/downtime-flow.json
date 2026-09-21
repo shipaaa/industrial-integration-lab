@@ -1,0 +1,357 @@
+{
+  "schema_version": "1.0",
+  "nifi_version": "2.10.0",
+  "flow": {
+    "name": "Downtime Kafka Ingestion",
+    "version": "1.0",
+    "run_once_trigger": "Consume Downtime Primary Events",
+    "manual_triggers": [
+      "Consume Downtime Primary Events",
+      "Consume Downtime Replay Events"
+    ],
+    "comments": "Managed from nifi/downtime-flow.json. PostgreSQL owns validation, duplicate detection, replay linkage, and reconciliation. Kafka offsets are acknowledged by transactional PublishKafka only after the database result is available."
+  },
+  "parameter_context": {
+    "name": "PlantBridge Downtime Kafka",
+    "description": "Local MVP parameters for Kafka downtime ingestion and controlled replay.",
+    "parameters": [
+      {"name": "Kafka Bootstrap Servers", "value": "kafka:19092", "sensitive": false},
+      {"name": "Downtime Primary Topic", "value": "plantbridge.downtime.events", "sensitive": false},
+      {"name": "Downtime Replay Topic", "value": "plantbridge.downtime.replay", "sensitive": false},
+      {"name": "Downtime DLQ Topic", "value": "plantbridge.downtime.dlq", "sensitive": false},
+      {"name": "Downtime Receipt Topic", "value": "plantbridge.downtime.receipts", "sensitive": false},
+      {"name": "Downtime Primary Group ID", "value": "plantbridge-nifi-downtime-primary-v1", "sensitive": false},
+      {"name": "Downtime Replay Group ID", "value": "plantbridge-nifi-downtime-replay-v1", "sensitive": false},
+      {"name": "PostgreSQL JDBC URL", "value": "jdbc:postgresql://postgres:5432/plantbridge", "sensitive": false},
+      {"name": "PostgreSQL User", "value": "plantbridge", "sensitive": false},
+      {"name": "PostgreSQL Password", "value": "plantbridge_dev", "sensitive": true},
+      {"name": "Maximum Retries", "value": "3", "sensitive": false}
+    ]
+  },
+  "controller_services": [
+    {
+      "key": "kafka_connection",
+      "name": "Downtime Kafka 3 Connection",
+      "type": "org.apache.nifi.kafka.service.Kafka3ConnectionService",
+      "bundle": {"group": "org.apache.nifi", "artifact": "nifi-kafka-3-service-nar", "version": "2.10.0"},
+      "properties": {
+        "bootstrap.servers": "#{Kafka Bootstrap Servers}",
+        "security.protocol": "PLAINTEXT",
+        "isolation.level": "read_committed",
+        "max.poll.records": "1"
+      }
+    },
+    {
+      "key": "postgres_pool",
+      "name": "Downtime PostgreSQL Pool",
+      "type": "org.apache.nifi.dbcp.DBCPConnectionPool",
+      "bundle": {"group": "org.apache.nifi", "artifact": "nifi-dbcp-service-nar", "version": "2.10.0"},
+      "properties": {
+        "Database Connection URL": "#{PostgreSQL JDBC URL}",
+        "Database Driver Class Name": "org.postgresql.Driver",
+        "Database Driver Location(s)": "/opt/nifi/nifi-current/lib/postgresql-42.7.13.jar",
+        "Database User": "#{PostgreSQL User}",
+        "Password": "#{PostgreSQL Password}",
+        "Validation Query": "SELECT 1"
+      }
+    },
+    {
+      "key": "json_writer",
+      "name": "Downtime SQL JSON Writer",
+      "type": "org.apache.nifi.json.JsonRecordSetWriter",
+      "bundle": {"group": "org.apache.nifi", "artifact": "nifi-record-serialization-services-nar", "version": "2.10.0"},
+      "properties": {
+        "Schema Access Strategy": "inherit-record-schema",
+        "Schema Write Strategy": "no-schema",
+        "Output Grouping": "output-array",
+        "Pretty Print JSON": "false"
+      }
+    }
+  ],
+  "processors": [
+    {
+      "key": "consume_primary",
+      "name": "Consume Downtime Primary Events",
+      "type": "org.apache.nifi.kafka.processors.ConsumeKafka",
+      "bundle": {"group": "org.apache.nifi", "artifact": "nifi-kafka-nar", "version": "2.10.0"},
+      "position": [0, 0],
+      "scheduling_period": "1 sec",
+      "properties": {
+        "Kafka Connection Service": "@service:kafka_connection",
+        "Group ID": "#{Downtime Primary Group ID}",
+        "Topic Format": "names",
+        "Topics": "#{Downtime Primary Topic}",
+        "auto.offset.reset": "earliest",
+        "Commit Offsets": "false",
+        "Processing Strategy": "FLOW_FILE",
+        "Key Attribute Encoding": "utf-8"
+      },
+      "auto_terminate": []
+    },
+    {
+      "key": "consume_replay",
+      "name": "Consume Downtime Replay Events",
+      "type": "org.apache.nifi.kafka.processors.ConsumeKafka",
+      "bundle": {"group": "org.apache.nifi", "artifact": "nifi-kafka-nar", "version": "2.10.0"},
+      "position": [0, 500],
+      "scheduling_period": "1 sec",
+      "properties": {
+        "Kafka Connection Service": "@service:kafka_connection",
+        "Group ID": "#{Downtime Replay Group ID}",
+        "Topic Format": "names",
+        "Topics": "#{Downtime Replay Topic}",
+        "auto.offset.reset": "earliest",
+        "Commit Offsets": "false",
+        "Processing Strategy": "FLOW_FILE",
+        "Key Attribute Encoding": "utf-8"
+      },
+      "auto_terminate": []
+    },
+    {
+      "key": "mark_primary",
+      "name": "Mark Downtime Primary Delivery",
+      "type": "org.apache.nifi.processors.attributes.UpdateAttribute",
+      "bundle": "update-attribute",
+      "position": [400, 0],
+      "properties": {"downtime.is_replay": "false"},
+      "auto_terminate": []
+    },
+    {
+      "key": "mark_replay",
+      "name": "Mark Downtime Replay Delivery",
+      "type": "org.apache.nifi.processors.attributes.UpdateAttribute",
+      "bundle": "update-attribute",
+      "position": [400, 500],
+      "properties": {"downtime.is_replay": "true"},
+      "auto_terminate": []
+    },
+    {
+      "key": "capture_payload",
+      "name": "Capture Downtime JSON Payload",
+      "type": "org.apache.nifi.processors.standard.ExtractText",
+      "bundle": "standard",
+      "position": [800, 250],
+      "properties": {
+        "Character Set": "UTF-8",
+        "Maximum Capture Group Length": "1048576",
+        "downtime.original.payload": "(?s)(.*)"
+      },
+      "auto_terminate": []
+    },
+    {
+      "key": "prepare_sql",
+      "name": "Prepare Downtime Database Contract",
+      "type": "org.apache.nifi.processors.attributes.UpdateAttribute",
+      "bundle": "update-attribute",
+      "position": [1200, 250],
+      "properties": {
+        "sql.args.1.type": "12",
+        "sql.args.1.value": "${downtime.original.payload}",
+        "sql.args.2.type": "12",
+        "sql.args.2.value": "${kafka.topic}",
+        "sql.args.3.type": "4",
+        "sql.args.3.value": "${kafka.partition}",
+        "sql.args.4.type": "-5",
+        "sql.args.4.value": "${kafka.offset}",
+        "sql.args.5.type": "12",
+        "sql.args.5.value": "${kafka.key}",
+        "sql.args.6.type": "-5",
+        "sql.args.6.value": "${kafka.timestamp}",
+        "sql.args.7.type": "16",
+        "sql.args.7.value": "${downtime.is_replay}"
+      },
+      "auto_terminate": []
+    },
+    {
+      "key": "load_database",
+      "name": "Load Downtime Through PostgreSQL Contract",
+      "type": "org.apache.nifi.processors.standard.ExecuteSQLRecord",
+      "bundle": "standard",
+      "position": [1600, 250],
+      "properties": {
+        "Database Connection Pooling Service": "@service:postgres_pool",
+        "SQL Query": "SELECT * FROM ods.load_downtime_kafka_record(?::text, ?::text, ?::integer, ?::bigint, ?::text, ?::bigint, ?::boolean)",
+        "Record Writer": "@service:json_writer",
+        "Max Rows Per FlowFile": "1",
+        "Set Auto Commit": "true"
+      },
+      "auto_terminate": []
+    },
+    {
+      "key": "retry_database",
+      "name": "Retry Downtime PostgreSQL Load",
+      "type": "org.apache.nifi.processors.standard.RetryFlowFile",
+      "bundle": "standard",
+      "position": [1600, 650],
+      "properties": {
+        "Retry Attribute": "downtime.db.retry.count",
+        "Maximum Retries": "#{Maximum Retries}",
+        "Penalize Retries": "true",
+        "Reuse Mode": "fail"
+      },
+      "auto_terminate": []
+    },
+    {
+      "key": "extract_result",
+      "name": "Extract Downtime Database Outcome",
+      "type": "org.apache.nifi.processors.standard.EvaluateJsonPath",
+      "bundle": "standard",
+      "position": [2000, 250],
+      "properties": {
+        "Destination": "flowfile-attribute",
+        "Return Type": "auto-detect",
+        "Path Not Found Behavior": "ignore",
+        "downtime.run_id": "$[0].run_id",
+        "downtime.correlation_id": "$[0].correlation_id",
+        "downtime.outcome": "$[0].outcome",
+        "downtime.rejected_record_id": "$[0].rejected_record_id",
+        "downtime.error_code": "$[0].error_code",
+        "downtime.error_text": "$[0].error_text"
+      },
+      "auto_terminate": []
+    },
+    {
+      "key": "route_outcome",
+      "name": "Route Downtime Database Outcome",
+      "type": "org.apache.nifi.processors.standard.RouteOnAttribute",
+      "bundle": "standard",
+      "position": [2400, 250],
+      "properties": {
+        "Routing Strategy": "Route to Property name",
+        "accepted_or_duplicate": "${downtime.outcome:equals('ACCEPTED'):or(${downtime.outcome:equals('DUPLICATE')})}",
+        "rejected": "${downtime.outcome:equals('REJECTED')}"
+      },
+      "auto_terminate": []
+    },
+    {
+      "key": "build_receipt",
+      "name": "Build Downtime Processing Receipt",
+      "type": "org.apache.nifi.processors.standard.ReplaceText",
+      "bundle": "standard",
+      "position": [2800, 0],
+      "properties": {
+        "Evaluation Mode": "Entire text",
+        "Replacement Strategy": "Always Replace",
+        "Replacement Value": "{\"schema_version\":\"1.0\",\"source_topic\":\"${kafka.topic:escapeJson()}\",\"source_partition\":${kafka.partition},\"source_offset\":${kafka.offset},\"source_timestamp\":${kafka.timestamp},\"message_key\":\"${kafka.key:escapeJson()}\",\"run_id\":\"${downtime.run_id:escapeJson()}\",\"correlation_id\":\"${downtime.correlation_id:escapeJson()}\",\"outcome\":\"${downtime.outcome:escapeJson()}\"}"
+      },
+      "auto_terminate": []
+    },
+    {
+      "key": "build_dlq",
+      "name": "Build Downtime DLQ Envelope",
+      "type": "org.apache.nifi.processors.standard.ReplaceText",
+      "bundle": "standard",
+      "position": [2800, 500],
+      "properties": {
+        "Evaluation Mode": "Entire text",
+        "Replacement Strategy": "Always Replace",
+        "Replacement Value": "{\"schema_version\":\"1.0\",\"original_topic\":\"${kafka.topic:escapeJson()}\",\"original_partition\":${kafka.partition},\"original_offset\":${kafka.offset},\"original_timestamp\":${kafka.timestamp},\"original_key\":\"${kafka.key:escapeJson()}\",\"original_payload\":${downtime.original.payload},\"rejected_record_id\":${downtime.rejected_record_id},\"correlation_id\":\"${downtime.correlation_id:escapeJson()}\",\"error_code\":\"${downtime.error_code:escapeJson()}\",\"error_text\":\"${downtime.error_text:escapeJson()}\"}"
+      },
+      "auto_terminate": []
+    },
+    {
+      "key": "publish_receipt",
+      "name": "Acknowledge Accepted Downtime Event",
+      "type": "org.apache.nifi.kafka.processors.PublishKafka",
+      "bundle": {"group": "org.apache.nifi", "artifact": "nifi-kafka-nar", "version": "2.10.0"},
+      "position": [3200, 0],
+      "properties": {
+        "Kafka Connection Service": "@service:kafka_connection",
+        "Topic Name": "#{Downtime Receipt Topic}",
+        "Kafka Key": "${kafka.key}",
+        "Failure Strategy": "Route to Failure",
+        "acks": "all",
+        "Transactions Enabled": "true",
+        "Publish Strategy": "USE_VALUE"
+      },
+      "auto_terminate": []
+    },
+    {
+      "key": "publish_dlq",
+      "name": "Publish Rejected Downtime Event to DLQ",
+      "type": "org.apache.nifi.kafka.processors.PublishKafka",
+      "bundle": {"group": "org.apache.nifi", "artifact": "nifi-kafka-nar", "version": "2.10.0"},
+      "position": [3200, 500],
+      "properties": {
+        "Kafka Connection Service": "@service:kafka_connection",
+        "Topic Name": "#{Downtime DLQ Topic}",
+        "Kafka Key": "${kafka.key}",
+        "Failure Strategy": "Route to Failure",
+        "acks": "all",
+        "Transactions Enabled": "true",
+        "Publish Strategy": "USE_VALUE"
+      },
+      "auto_terminate": []
+    },
+    {
+      "key": "retry_receipt",
+      "name": "Retry Downtime Receipt Publish",
+      "type": "org.apache.nifi.processors.standard.RetryFlowFile",
+      "bundle": "standard",
+      "position": [3200, -350],
+      "properties": {"Retry Attribute": "downtime.receipt.retry.count", "Maximum Retries": "#{Maximum Retries}", "Penalize Retries": "true", "Reuse Mode": "fail"},
+      "auto_terminate": []
+    },
+    {
+      "key": "retry_dlq",
+      "name": "Retry Downtime DLQ Publish",
+      "type": "org.apache.nifi.processors.standard.RetryFlowFile",
+      "bundle": "standard",
+      "position": [3200, 850],
+      "properties": {"Retry Attribute": "downtime.dlq.retry.count", "Maximum Retries": "#{Maximum Retries}", "Penalize Retries": "true", "Reuse Mode": "fail"},
+      "auto_terminate": []
+    },
+    {
+      "key": "complete",
+      "name": "Log Downtime Delivery Complete",
+      "type": "org.apache.nifi.processors.standard.LogAttribute",
+      "bundle": "standard",
+      "position": [3600, 250],
+      "properties": {"Log Level": "info", "Log Payload": "false"},
+      "auto_terminate": ["success"]
+    },
+    {
+      "key": "technical_failure",
+      "name": "Log Downtime Technical Failure",
+      "type": "org.apache.nifi.processors.standard.LogAttribute",
+      "bundle": "standard",
+      "position": [3600, 750],
+      "properties": {"Log Level": "error", "Log Payload": "true"},
+      "auto_terminate": ["success"]
+    }
+  ],
+  "connections": [
+    ["consume_primary", "success", "mark_primary"],
+    ["consume_replay", "success", "mark_replay"],
+    ["mark_primary", "success", "capture_payload"],
+    ["mark_replay", "success", "capture_payload"],
+    ["capture_payload", "matched", "prepare_sql"],
+    ["capture_payload", "unmatched", "technical_failure"],
+    ["prepare_sql", "success", "load_database"],
+    ["load_database", "success", "extract_result"],
+    ["load_database", "failure", "retry_database"],
+    ["retry_database", "retry", "load_database"],
+    ["retry_database", "retries_exceeded", "technical_failure"],
+    ["retry_database", "failure", "technical_failure"],
+    ["extract_result", "matched", "route_outcome"],
+    ["extract_result", "unmatched", "technical_failure"],
+    ["extract_result", "failure", "technical_failure"],
+    ["route_outcome", "accepted_or_duplicate", "build_receipt"],
+    ["route_outcome", "rejected", "build_dlq"],
+    ["route_outcome", "unmatched", "technical_failure"],
+    ["build_receipt", "success", "publish_receipt"],
+    ["build_receipt", "failure", "technical_failure"],
+    ["build_dlq", "success", "publish_dlq"],
+    ["build_dlq", "failure", "technical_failure"],
+    ["publish_receipt", "success", "complete"],
+    ["publish_receipt", "failure", "retry_receipt"],
+    ["retry_receipt", "retry", "publish_receipt"],
+    ["retry_receipt", "retries_exceeded", "technical_failure"],
+    ["retry_receipt", "failure", "technical_failure"],
+    ["publish_dlq", "success", "complete"],
+    ["publish_dlq", "failure", "retry_dlq"],
+    ["retry_dlq", "retry", "publish_dlq"],
+    ["retry_dlq", "retries_exceeded", "technical_failure"],
+    ["retry_dlq", "failure", "technical_failure"]
+  ]
+}
