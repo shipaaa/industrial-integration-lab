@@ -1,4 +1,4 @@
-.PHONY: start start-api start-kafka bootstrap-kafka produce-downtime consume-downtime load-downtime-kafka produce-downtime-replay consume-downtime-replay replay-downtime-kafka migrate-downtime test-downtime-db test-downtime-kafka start-nifi bootstrap-nifi bootstrap-nifi-laboratory verify-nifi replay-nifi load-nifi-laboratory replay-nifi-laboratory verify-nifi-laboratory test-nifi-laboratory stop load-reference replay-reference verify-reference migrate-telemetry load-telemetry verify-telemetry replay-telemetry migrate-laboratory load-laboratory-valid load-laboratory-initial replay-laboratory verify-laboratory test test-api test-telemetry-db test-laboratory-db test-postgres-local
+.PHONY: start start-api start-kafka bootstrap-kafka produce-downtime consume-downtime load-downtime-kafka produce-downtime-replay consume-downtime-replay replay-downtime-kafka migrate-downtime test-downtime-db test-downtime-kafka test-nifi-downtime start-nifi bootstrap-nifi bootstrap-nifi-laboratory bootstrap-nifi-downtime verify-nifi replay-nifi load-nifi-laboratory replay-nifi-laboratory verify-nifi-laboratory test-nifi-laboratory stop load-reference replay-reference verify-reference migrate-telemetry load-telemetry verify-telemetry replay-telemetry migrate-laboratory load-laboratory-valid load-laboratory-initial replay-laboratory verify-laboratory test test-api test-telemetry-db test-laboratory-db test-postgres-local
 
 start:
 	docker compose up --detach --wait postgres
@@ -38,17 +38,25 @@ test-downtime-db:
 test-downtime-kafka:
 	./scripts/test-downtime-kafka.sh
 
+test-nifi-downtime:
+	./scripts/test-nifi-downtime.sh
+
 start-nifi:
-	docker compose up --detach --build --wait postgres source-simulator nifi
+	docker compose up --detach --build --wait postgres source-simulator kafka nifi
 	./scripts/bootstrap-nifi.py
 	./scripts/bootstrap-nifi-laboratory.sh
+	./scripts/bootstrap-nifi-downtime.sh
 
 bootstrap-nifi:
 	./scripts/bootstrap-nifi.py
 	./scripts/bootstrap-nifi-laboratory.sh
+	./scripts/bootstrap-nifi-downtime.sh
 
 bootstrap-nifi-laboratory:
 	./scripts/bootstrap-nifi-laboratory.sh
+
+bootstrap-nifi-downtime:
+	./scripts/bootstrap-nifi-downtime.sh
 
 verify-nifi:
 	./scripts/verify-nifi-telemetry.sh
