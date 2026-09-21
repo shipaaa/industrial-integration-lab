@@ -6,10 +6,9 @@ Portfolio-grade industrial data integration project demonstrating how equipment 
 
 The lab is designed to demonstrate the practical responsibilities of a Middle Technical Implementation Engineer: discovery, source analysis, solution design, data mapping, integration development, testing, deployment planning, troubleshooting, and operational handover.
 
-> **Project status:** Stage 3 — Integration Implementation. Reference,
-> telemetry, laboratory CSV, and Kafka downtime contracts are executable; the
-> NiFi telemetry and laboratory process groups are reproducibly provisioned
-> from Git.
+> **Project status:** Demo-ready MVP. All four source channels are executable,
+> all three NiFi process groups are reproducibly provisioned from Git, and one
+> Docker smoke test verifies the complete BATCH-003 investigation path.
 
 ## Business Scenario
 
@@ -38,10 +37,11 @@ The integration platform will connect these datasets so that production and qual
 flowchart LR
     API["FastAPI telemetry source"] --> NIFI["Apache NiFi"]
     CSV["Laboratory CSV files"] --> NIFI
-    JSON["Reference JSON files"] --> NIFI
+    JSON["Reference JSON files"] --> LOADER["MVP shell loader"]
     KAFKA["Kafka downtime events"] --> NIFI
 
     NIFI --> STG["PostgreSQL STG"]
+    LOADER --> STG
     STG --> ODS["PostgreSQL ODS"]
     ODS --> DDS["PostgreSQL DDS"]
     DDS --> DM["PostgreSQL DM"]
@@ -132,10 +132,27 @@ The completed portfolio project will include:
 
 ## Current Work
 
-Reference ingestion, telemetry API/database ingestion, versioned laboratory CSV
-ingestion, both existing NiFi process groups, and the Kafka downtime contract
-are implemented. The current delivery adds downtime correlation, DLQ routing,
-controlled replay, and downtime minutes to the BATCH-003 investigation dossier.
+Reference ingestion, telemetry API ingestion, versioned laboratory CSV
+ingestion, and Kafka downtime ingestion are implemented. NiFi owns orchestration
+for telemetry, laboratory, and downtime; the reference shell loader is the one
+documented MVP limitation. PostgreSQL remains the authority for business
+validation, duplicate outcomes, replay linkage, and reconciliation.
+
+## Demo-ready acceptance
+
+With Docker Desktop running, the single acceptance command is:
+
+```bash
+make test-mvp
+```
+
+It builds and starts the stack, provisions the flows, runs all static tests,
+loads all four channels, exercises duplicate and correction replay paths, and
+asserts the final BATCH-003 dossier: 24 telemetry measurements, watermark
+`TEL-0024`, laboratory status `FAIL`, one temperature deviation, 7 downtime
+minutes, and zero reconciliation failures. The 10–15 minute operator sequence
+and recovery checks are in
+[`docs/07-runbooks/mvp-demo.md`](docs/07-runbooks/mvp-demo.md).
 
 ## Technology Stack
 
@@ -249,19 +266,23 @@ are in
 ### Kafka downtime events
 
 The downtime slice runs an official single-node Kafka broker in KRaft mode and
-creates separate primary, DLQ, and replay topics. Deterministic fixtures contain
-two completed incidents, an exact event duplicate, and an unknown reason. A
-temporary adapter preserves Kafka metadata, calls the PostgreSQL event
-transaction, and publishes business rejections to the DLQ.
+creates primary, DLQ, replay, and processing-receipt topics. The source-controlled
+NiFi process group consumes primary and replay deliveries, preserves Kafka
+topic/partition/offset/timestamp, calls the PostgreSQL event transaction, and
+publishes either a transactional receipt or the database business rejection to
+the DLQ. Offsets are not committed by `ConsumeKafka`; `PublishKafka` acknowledges
+them only after the required database outcome exists.
 
 ```bash
 make test-downtime-db
 make test-downtime-kafka
+make test-nifi-downtime
 ```
 
-The database test covers correlation, ordering, idempotency, reconciliation,
-and linked replay without requiring Kafka. The full test additionally proves
-real topic production/consumption and the DLQ envelope. After the primary load,
+The first two tests keep the database/Kafka contract independently testable with
+the compatibility Python adapter. The NiFi Docker E2E is the demo path and proves
+primary ingestion, duplicate handling, DLQ, bounded retries, transactional
+receipts, timestamp lineage, and linked replay. After the primary load,
 `BATCH-003` has 7 downtime minutes; replay closes the known BATCH-001 rejection.
 Operational details are in
 [`docs/07-runbooks/kafka-downtime-events.md`](docs/07-runbooks/kafka-downtime-events.md).

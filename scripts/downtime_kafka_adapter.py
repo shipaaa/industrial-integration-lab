@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""Temporary Kafka-to-PostgreSQL adapter for the downtime contract slice.
+"""Compatibility Kafka adapter used by the standalone downtime contract test.
 
-NiFi orchestration is intentionally deferred. This adapter keeps Kafka record
-metadata intact, calls the same database contract NiFi will use, and publishes
-database rejections to the DLQ.
+The demo path is the source-controlled NiFi flow. This small adapter remains so
+the database/Kafka slice can still be tested independently of NiFi.
 """
 
 from __future__ import annotations

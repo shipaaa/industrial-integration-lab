@@ -2,9 +2,9 @@
 
 ## Purpose
 
-Run the local downtime event contract, inspect its audit trail, and replay the
-known invalid reason. The Python adapter is temporary: it proves the broker and
-database boundary before the NiFi consumer process group is added.
+Run the NiFi downtime process group, inspect its audit trail, and replay the
+known invalid reason. The Python adapter remains only for the independent
+database/Kafka contract test; NiFi is the demo path.
 
 ## Prerequisites
 
@@ -17,6 +17,7 @@ database boundary before the NiFi consumer process group is added.
 ```bash
 make test
 make test-downtime-kafka
+make test-nifi-downtime
 ```
 
 The Kafka test resets only these local topics:
@@ -24,6 +25,7 @@ The Kafka test resets only these local topics:
 - `plantbridge.downtime.events`
 - `plantbridge.downtime.dlq`
 - `plantbridge.downtime.replay`
+- `plantbridge.downtime.receipts`
 
 It then proves:
 
@@ -33,7 +35,10 @@ It then proves:
 4. every delivery has a matched one-record reconciliation;
 5. controlled replay marks the original rejection `REPLAYED`;
 6. BATCH-003 has 7 downtime minutes and BATCH-002 has 10;
-7. an end earlier than its start is rejected without closing the incident.
+7. Kafka topic/partition/offset/timestamp are retained;
+8. an offset is acknowledged by transactional publish only after the database
+   outcome exists;
+9. an end earlier than its start is rejected without closing the incident.
 
 ## Manual sequence
 
@@ -41,14 +46,12 @@ It then proves:
 make start
 make start-kafka
 make migrate-downtime
-make load-downtime-kafka
-make replay-downtime-kafka
+make start-nifi
+make test-nifi-downtime
 ```
 
-Use `make load-downtime-kafka` only after the primary topic is empty or after a
-test reset: the temporary consumer intentionally reads from the beginning to
-exercise database idempotency. NiFi offset management is part of the next
-orchestration slice.
+`make test-nifi-downtime` resets only the local downtime tables and four
+downtime topics. It leaves reference, telemetry, and laboratory ODS data intact.
 
 ## Inspection
 
@@ -60,6 +63,9 @@ ORDER BY batch_id;
 SELECT source_record_id, error_text, replay_status
 FROM rejected.record
 WHERE record_type = 'DOWNTIME';
+SELECT topic_name, partition_id, offset_id, kafka_timestamp, processing_status
+FROM stg.downtime_event_record
+ORDER BY stg_downtime_event_record_id;
 ```
 
 ## Recovery boundaries
@@ -70,5 +76,5 @@ WHERE record_type = 'DOWNTIME';
 - Do not close an incident manually in ODS; replay the missing or corrected end
   event.
 - A Kafka or PostgreSQL technical failure is not a DLQ business rejection. Fix
-  connectivity and rerun consumption so the database remains the outcome
-  authority.
+  connectivity and restart the affected manual consumer. Its offset was not
+  acknowledged until a transactional receipt or DLQ publish succeeded.

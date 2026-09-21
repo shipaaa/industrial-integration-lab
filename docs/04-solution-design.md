@@ -4,10 +4,11 @@
 
 ```mermaid
 flowchart LR
-    JSON["Reference JSON"] --> NIFI["Apache NiFi"]
+    JSON["Reference JSON"] --> LOADER["MVP shell loader"]
     REST["FastAPI telemetry"] --> NIFI
     CSV["Laboratory CSV"] --> NIFI
     KAFKA["Kafka downtime events"] --> NIFI
+    LOADER --> CONTRACT
     NIFI --> CONTRACT["PostgreSQL ingestion contracts"]
     CONTRACT --> STG["STG raw records"]
     CONTRACT --> ODS["ODS validated facts"]
@@ -94,20 +95,30 @@ starts the downstream graph but leaves both triggers stopped, so provisioning
 cannot apply a correction. The controlled replay decision is recorded in
 [`ADR-006`](adr/0006-controlled-nifi-laboratory-replay.md).
 
-## Downtime Kafka contract slice
+## NiFi downtime orchestration
 
 The local MVP uses one Apache Kafka broker in combined KRaft mode. Separate
-primary, DLQ, and replay topics keep the normal event stream, business-invalid
-deliveries, and operator-approved corrections explicit.
+primary, DLQ, replay, and receipt topics keep normal events, business-invalid
+deliveries, operator-approved corrections, and successful offset
+acknowledgements explicit.
 
 Downtime starts and ends are immutable events correlated by `downtime_id`.
-PostgreSQL preserves topic/partition/offset and payload in STG, uses `event_id`
-for idempotency, and assembles a current incident only after business
-validation. Completed incidents feed `dm.dm_batch_investigation`; open incidents
-remain visible without contributing duration.
+NiFi has independent primary and replay consumers. Each delivery keeps the
+Kafka topic, partition, offset, timestamp, key, and original payload. NiFi calls
+`ods.load_downtime_kafka_record`, which delegates to the existing PostgreSQL
+business contract. PostgreSQL preserves metadata in STG, uses `event_id` for
+idempotency, decides accepted/rejected/duplicate, links a corrected replay, and
+reconciles every delivery.
 
-A temporary Python adapter consumes deterministic Kafka fixtures, calls the
-database transaction, and publishes `REJECTED` outcomes to the DLQ. The next
-slice will replace this adapter with a source-controlled NiFi process group
-without changing the event or database contracts. Correlation rules are
-defined in [`ADR-007`](adr/0007-downtime-event-correlation.md).
+Both consumers use `Commit Offsets=false` and fetch one record per poll. After a
+database outcome, transactional `PublishKafka` either writes an accepted or
+duplicate receipt, or writes a rejection envelope to the DLQ. That publish
+acknowledges the source offset. PostgreSQL or Kafka failures take bounded retry
+paths; exhausted technical failures remain recoverable and are never converted
+into business rejections. Correlation rules are defined in
+[`ADR-007`](adr/0007-downtime-event-correlation.md).
+
+The reference JSON path intentionally remains a shell loader for this MVP. It
+uses the same PostgreSQL ingestion contract and is covered by the unified smoke
+test; moving it to NiFi is deferred rather than introducing another flow before
+demo acceptance.
