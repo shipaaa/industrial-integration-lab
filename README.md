@@ -7,8 +7,9 @@ Portfolio-grade industrial data integration project demonstrating how equipment 
 The lab is designed to demonstrate the practical responsibilities of a Middle Technical Implementation Engineer: discovery, source analysis, solution design, data mapping, integration development, testing, deployment planning, troubleshooting, and operational handover.
 
 > **Project status:** Stage 3 — Integration Implementation. Reference,
-> telemetry, and laboratory CSV contracts are executable; the NiFi telemetry
-> and laboratory process groups are reproducibly provisioned from Git.
+> telemetry, laboratory CSV, and Kafka downtime contracts are executable; the
+> NiFi telemetry and laboratory process groups are reproducibly provisioned
+> from Git.
 
 ## Business Scenario
 
@@ -132,9 +133,9 @@ The completed portfolio project will include:
 ## Current Work
 
 Reference ingestion, telemetry API/database ingestion, versioned laboratory CSV
-ingestion, and both NiFi process groups are implemented. The current delivery
-adds NiFi header validation, file checksums, manual correction replay, and
-end-to-end idempotency evidence for the BATCH-003 investigation dossier.
+ingestion, both existing NiFi process groups, and the Kafka downtime contract
+are implemented. The current delivery adds downtime correlation, DLQ routing,
+controlled replay, and downtime minutes to the BATCH-003 investigation dossier.
 
 ## Technology Stack
 
@@ -244,3 +245,23 @@ The test proves the initial LAB-003 rejection, the linked version-2 replay, and
 duplicate handling when the primary files are run again. Operational details
 are in
 [`docs/07-runbooks/nifi-laboratory-flow.md`](docs/07-runbooks/nifi-laboratory-flow.md).
+
+### Kafka downtime events
+
+The downtime slice runs an official single-node Kafka broker in KRaft mode and
+creates separate primary, DLQ, and replay topics. Deterministic fixtures contain
+two completed incidents, an exact event duplicate, and an unknown reason. A
+temporary adapter preserves Kafka metadata, calls the PostgreSQL event
+transaction, and publishes business rejections to the DLQ.
+
+```bash
+make test-downtime-db
+make test-downtime-kafka
+```
+
+The database test covers correlation, ordering, idempotency, reconciliation,
+and linked replay without requiring Kafka. The full test additionally proves
+real topic production/consumption and the DLQ envelope. After the primary load,
+`BATCH-003` has 7 downtime minutes; replay closes the known BATCH-001 rejection.
+Operational details are in
+[`docs/07-runbooks/kafka-downtime-events.md`](docs/07-runbooks/kafka-downtime-events.md).
