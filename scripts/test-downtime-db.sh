@@ -3,6 +3,9 @@ set -euo pipefail
 
 plantbridge_project_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+docker compose --project-directory "${plantbridge_project_dir}" up \
+  --detach --wait postgres
+
 "${plantbridge_project_dir}/scripts/apply-downtime-db.sh"
 
 for plantbridge_sql_file in \
