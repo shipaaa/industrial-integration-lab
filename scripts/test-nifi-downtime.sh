@@ -36,8 +36,10 @@ plantbridge_wait_for_stg_count() {
   return 1
 }
 
-docker compose --project-directory "${plantbridge_project_dir}" up \
-  --detach --build --wait postgres kafka nifi
+if [[ "${PLANTBRIDGE_SKIP_STACK_START:-0}" != "1" ]]; then
+  docker compose --project-directory "${plantbridge_project_dir}" up \
+    --detach --build --wait postgres kafka nifi
+fi
 "${plantbridge_project_dir}/scripts/apply-downtime-db.sh"
 "${plantbridge_project_dir}/scripts/bootstrap-nifi-downtime.sh"
 
