@@ -1,10 +1,42 @@
-.PHONY: start start-api start-nifi bootstrap-nifi bootstrap-nifi-laboratory verify-nifi replay-nifi load-nifi-laboratory replay-nifi-laboratory verify-nifi-laboratory test-nifi-laboratory stop load-reference replay-reference verify-reference migrate-telemetry load-telemetry verify-telemetry replay-telemetry migrate-laboratory load-laboratory-valid load-laboratory-initial replay-laboratory verify-laboratory test test-api test-telemetry-db test-laboratory-db test-postgres-local
+.PHONY: start start-api start-kafka bootstrap-kafka produce-downtime consume-downtime load-downtime-kafka produce-downtime-replay consume-downtime-replay replay-downtime-kafka migrate-downtime test-downtime-db test-downtime-kafka start-nifi bootstrap-nifi bootstrap-nifi-laboratory verify-nifi replay-nifi load-nifi-laboratory replay-nifi-laboratory verify-nifi-laboratory test-nifi-laboratory stop load-reference replay-reference verify-reference migrate-telemetry load-telemetry verify-telemetry replay-telemetry migrate-laboratory load-laboratory-valid load-laboratory-initial replay-laboratory verify-laboratory test test-api test-telemetry-db test-laboratory-db test-postgres-local
 
 start:
 	docker compose up --detach --wait postgres
 
 start-api:
 	docker compose up --detach --build --wait source-simulator
+
+start-kafka:
+	docker compose up --detach --wait kafka
+	./scripts/bootstrap-kafka.sh
+
+bootstrap-kafka:
+	./scripts/bootstrap-kafka.sh
+
+produce-downtime:
+	./scripts/produce-downtime-events.sh
+
+consume-downtime:
+	python3 ./scripts/downtime_kafka_adapter.py --topic plantbridge.downtime.events --max-messages 6
+
+load-downtime-kafka: produce-downtime consume-downtime
+
+produce-downtime-replay:
+	./scripts/produce-downtime-replay.sh
+
+consume-downtime-replay:
+	python3 ./scripts/downtime_kafka_adapter.py --topic plantbridge.downtime.replay --max-messages 2
+
+replay-downtime-kafka: produce-downtime-replay consume-downtime-replay
+
+migrate-downtime:
+	./scripts/apply-downtime-db.sh
+
+test-downtime-db:
+	./scripts/test-downtime-db.sh
+
+test-downtime-kafka:
+	./scripts/test-downtime-kafka.sh
 
 start-nifi:
 	docker compose up --detach --build --wait postgres source-simulator nifi
