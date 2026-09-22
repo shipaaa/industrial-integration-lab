@@ -123,7 +123,7 @@
       "name": "Trigger Laboratory Correction Replay",
       "type": "org.apache.nifi.processors.standard.GenerateFlowFile",
       "bundle": "standard",
-      "position": [0, 500],
+      "position": [0, 350],
       "scheduling_period": "1 day",
       "properties": {
         "Data Format": "Text",
@@ -136,7 +136,7 @@
       "name": "Split Laboratory File Manifest",
       "type": "org.apache.nifi.processors.standard.SplitJson",
       "bundle": "standard",
-      "position": [400, 200],
+      "position": [350, 175],
       "properties": {
         "JsonPath Expression": "$[*]"
       },
@@ -147,7 +147,7 @@
       "name": "Extract Laboratory File Attributes",
       "type": "org.apache.nifi.processors.standard.EvaluateJsonPath",
       "bundle": "standard",
-      "position": [800, 200],
+      "position": [700, 175],
       "properties": {
         "Destination": "flowfile-attribute",
         "Return Type": "auto-detect",
@@ -163,7 +163,7 @@
       "name": "Fetch Laboratory CSV",
       "type": "org.apache.nifi.processors.standard.FetchFile",
       "bundle": "standard",
-      "position": [1200, 200],
+      "position": [1050, 175],
       "properties": {
         "File to Fetch": "${laboratory.absolute_path}/${laboratory.filename}",
         "Completion Strategy": "None"
@@ -175,7 +175,7 @@
       "name": "Calculate Laboratory File Checksum",
       "type": "org.apache.nifi.processors.standard.CryptographicHashContent",
       "bundle": "standard",
-      "position": [1600, 200],
+      "position": [1400, 175],
       "properties": {
         "Hash Algorithm": "SHA-256",
         "Fail When Content Empty": "true"
@@ -187,7 +187,7 @@
       "name": "Extract Laboratory CSV Header",
       "type": "org.apache.nifi.processors.standard.ExtractText",
       "bundle": "standard",
-      "position": [2000, 200],
+      "position": [1750, 175],
       "properties": {
         "Character Set": "UTF-8",
         "Maximum Capture Group Length": "4096",
@@ -200,7 +200,7 @@
       "name": "Set Laboratory Header Contract",
       "type": "org.apache.nifi.processors.attributes.UpdateAttribute",
       "bundle": "update-attribute",
-      "position": [2200, 200],
+      "position": [1750, 500],
       "properties": {
         "laboratory.expected_header": "#{Laboratory CSV Header}"
       },
@@ -211,7 +211,7 @@
       "name": "Validate Laboratory CSV Header",
       "type": "org.apache.nifi.processors.standard.RouteOnAttribute",
       "bundle": "standard",
-      "position": [2400, 200],
+      "position": [1400, 500],
       "properties": {
         "Routing Strategy": "Route to Property name",
         "valid": "${laboratory.csv.header:equals(${laboratory.expected_header})}"
@@ -223,7 +223,7 @@
       "name": "Convert Laboratory CSV to JSON",
       "type": "org.apache.nifi.processors.standard.ConvertRecord",
       "bundle": "standard",
-      "position": [2800, 200],
+      "position": [1050, 500],
       "properties": {
         "Record Reader": "@service:csv_reader",
         "Record Writer": "@service:json_writer",
@@ -236,7 +236,7 @@
       "name": "Capture Laboratory JSON Rows",
       "type": "org.apache.nifi.processors.standard.ExtractText",
       "bundle": "standard",
-      "position": [3200, 200],
+      "position": [700, 500],
       "properties": {
         "Character Set": "UTF-8",
         "Maximum Capture Group Length": "1048576",
@@ -249,7 +249,7 @@
       "name": "Route Laboratory Load Mode",
       "type": "org.apache.nifi.processors.standard.RouteOnAttribute",
       "bundle": "standard",
-      "position": [3600, 200],
+      "position": [350, 500],
       "properties": {
         "Routing Strategy": "Route to Property name",
         "normal": "${laboratory.replay_mode:equals('false')}",
@@ -262,7 +262,7 @@
       "name": "Prepare Laboratory Load Transaction",
       "type": "org.apache.nifi.processors.attributes.UpdateAttribute",
       "bundle": "update-attribute",
-      "position": [4000, 0],
+      "position": [350, 850],
       "properties": {
         "sql.args.1.type": "12",
         "sql.args.1.value": "${laboratory.rows}",
@@ -280,7 +280,7 @@
       "name": "Prepare Laboratory Replay Transaction",
       "type": "org.apache.nifi.processors.attributes.UpdateAttribute",
       "bundle": "update-attribute",
-      "position": [4000, 500],
+      "position": [350, 1150],
       "properties": {
         "sql.args.1.type": "12",
         "sql.args.1.value": "${laboratory.rows}",
@@ -300,7 +300,7 @@
       "name": "Load Laboratory CSV",
       "type": "org.apache.nifi.processors.standard.ExecuteSQL",
       "bundle": "standard",
-      "position": [4400, 0],
+      "position": [700, 850],
       "properties": {
         "Database Connection Pooling Service": "@service:postgres_pool",
         "SQL Query": "SELECT ods.load_laboratory_csv(?::jsonb, ?::text, ?::text, ?::text)",
@@ -314,7 +314,7 @@
       "name": "Replay Corrected Laboratory CSV",
       "type": "org.apache.nifi.processors.standard.ExecuteSQL",
       "bundle": "standard",
-      "position": [4400, 500],
+      "position": [700, 1150],
       "properties": {
         "Database Connection Pooling Service": "@service:postgres_pool",
         "SQL Query": "SELECT ods.load_laboratory_csv(?::jsonb, ?::text, ?::text, ?::text, COALESCE((SELECT rejected_record_id FROM rejected.record WHERE record_type = 'LABORATORY' AND source_record_id = ((?::jsonb)->0->>'lab_result_id') AND replay_status = 'PENDING' ORDER BY rejected_at DESC LIMIT 1), -1))",
@@ -328,7 +328,7 @@
       "name": "Retry Laboratory Load",
       "type": "org.apache.nifi.processors.standard.RetryFlowFile",
       "bundle": "standard",
-      "position": [4400, -400],
+      "position": [1050, 850],
       "properties": {
         "Retry Attribute": "laboratory.db.retry.count",
         "Maximum Retries": "#{Maximum Retries}",
@@ -342,7 +342,7 @@
       "name": "Retry Laboratory Replay",
       "type": "org.apache.nifi.processors.standard.RetryFlowFile",
       "bundle": "standard",
-      "position": [4400, 900],
+      "position": [1050, 1150],
       "properties": {
         "Retry Attribute": "laboratory.replay.retry.count",
         "Maximum Retries": "#{Maximum Retries}",
@@ -356,7 +356,7 @@
       "name": "Log Laboratory Load Complete",
       "type": "org.apache.nifi.processors.standard.LogAttribute",
       "bundle": "standard",
-      "position": [4800, 200],
+      "position": [1400, 1000],
       "properties": {
         "Log Level": "info",
         "Log Payload": "false"
@@ -366,9 +366,10 @@
     {
       "key": "failure",
       "name": "Log Laboratory Technical Failure",
+      "layout_role": "error_sink",
       "type": "org.apache.nifi.processors.standard.LogAttribute",
       "bundle": "standard",
-      "position": [4800, 700],
+      "position": [2100, 1400],
       "properties": {
         "Log Level": "error",
         "Log Payload": "true"

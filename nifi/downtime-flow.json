@@ -93,7 +93,7 @@
       "name": "Consume Downtime Replay Events",
       "type": "org.apache.nifi.kafka.processors.ConsumeKafka",
       "bundle": {"group": "org.apache.nifi", "artifact": "nifi-kafka-nar", "version": "2.10.0"},
-      "position": [0, 500],
+      "position": [0, 350],
       "scheduling_period": "1 sec",
       "properties": {
         "Kafka Connection Service": "@service:kafka_connection",
@@ -112,7 +112,7 @@
       "name": "Mark Downtime Primary Delivery",
       "type": "org.apache.nifi.processors.attributes.UpdateAttribute",
       "bundle": "update-attribute",
-      "position": [400, 0],
+      "position": [300, 0],
       "properties": {"downtime.is_replay": "false"},
       "auto_terminate": []
     },
@@ -121,7 +121,7 @@
       "name": "Mark Downtime Replay Delivery",
       "type": "org.apache.nifi.processors.attributes.UpdateAttribute",
       "bundle": "update-attribute",
-      "position": [400, 500],
+      "position": [300, 300],
       "properties": {"downtime.is_replay": "true"},
       "auto_terminate": []
     },
@@ -130,7 +130,7 @@
       "name": "Capture Downtime JSON Payload",
       "type": "org.apache.nifi.processors.standard.ExtractText",
       "bundle": "standard",
-      "position": [800, 250],
+      "position": [600, 150],
       "properties": {
         "Character Set": "UTF-8",
         "Maximum Capture Group Length": "1048576",
@@ -143,7 +143,7 @@
       "name": "Prepare Downtime Database Contract",
       "type": "org.apache.nifi.processors.attributes.UpdateAttribute",
       "bundle": "update-attribute",
-      "position": [1200, 250],
+      "position": [900, 150],
       "properties": {
         "sql.args.1.type": "12",
         "sql.args.1.value": "${downtime.original.payload}",
@@ -167,7 +167,7 @@
       "name": "Load Downtime Through PostgreSQL Contract",
       "type": "org.apache.nifi.processors.standard.ExecuteSQLRecord",
       "bundle": "standard",
-      "position": [1600, 250],
+      "position": [1200, 150],
       "properties": {
         "Database Connection Pooling Service": "@service:postgres_pool",
         "SQL Query": "SELECT * FROM ods.load_downtime_kafka_record(?::text, ?::text, ?::integer, ?::bigint, ?::text, ?::bigint, ?::boolean)",
@@ -182,7 +182,7 @@
       "name": "Retry Downtime PostgreSQL Load",
       "type": "org.apache.nifi.processors.standard.RetryFlowFile",
       "bundle": "standard",
-      "position": [1600, 650],
+      "position": [1200, 600],
       "properties": {
         "Retry Attribute": "downtime.db.retry.count",
         "Maximum Retries": "#{Maximum Retries}",
@@ -196,7 +196,7 @@
       "name": "Extract Downtime Database Outcome",
       "type": "org.apache.nifi.processors.standard.EvaluateJsonPath",
       "bundle": "standard",
-      "position": [2000, 250],
+      "position": [1500, 150],
       "properties": {
         "Destination": "flowfile-attribute",
         "Return Type": "auto-detect",
@@ -215,7 +215,7 @@
       "name": "Route Downtime Database Outcome",
       "type": "org.apache.nifi.processors.standard.RouteOnAttribute",
       "bundle": "standard",
-      "position": [2400, 250],
+      "position": [1800, 150],
       "properties": {
         "Routing Strategy": "Route to Property name",
         "accepted_or_duplicate": "${downtime.outcome:equals('ACCEPTED'):or(${downtime.outcome:equals('DUPLICATE')})}",
@@ -228,7 +228,7 @@
       "name": "Build Downtime Processing Receipt",
       "type": "org.apache.nifi.processors.standard.ReplaceText",
       "bundle": "standard",
-      "position": [2800, 0],
+      "position": [2100, 0],
       "properties": {
         "Evaluation Mode": "Entire text",
         "Replacement Strategy": "Always Replace",
@@ -241,7 +241,7 @@
       "name": "Build Downtime DLQ Envelope",
       "type": "org.apache.nifi.processors.standard.ReplaceText",
       "bundle": "standard",
-      "position": [2800, 500],
+      "position": [2100, 300],
       "properties": {
         "Evaluation Mode": "Entire text",
         "Replacement Strategy": "Always Replace",
@@ -254,7 +254,7 @@
       "name": "Acknowledge Accepted Downtime Event",
       "type": "org.apache.nifi.kafka.processors.PublishKafka",
       "bundle": {"group": "org.apache.nifi", "artifact": "nifi-kafka-nar", "version": "2.10.0"},
-      "position": [3200, 0],
+      "position": [2400, 0],
       "properties": {
         "Kafka Connection Service": "@service:kafka_connection",
         "Topic Name": "#{Downtime Receipt Topic}",
@@ -271,7 +271,7 @@
       "name": "Publish Rejected Downtime Event to DLQ",
       "type": "org.apache.nifi.kafka.processors.PublishKafka",
       "bundle": {"group": "org.apache.nifi", "artifact": "nifi-kafka-nar", "version": "2.10.0"},
-      "position": [3200, 500],
+      "position": [2400, 300],
       "properties": {
         "Kafka Connection Service": "@service:kafka_connection",
         "Topic Name": "#{Downtime DLQ Topic}",
@@ -288,7 +288,7 @@
       "name": "Retry Downtime Receipt Publish",
       "type": "org.apache.nifi.processors.standard.RetryFlowFile",
       "bundle": "standard",
-      "position": [3200, -350],
+      "position": [2400, -350],
       "properties": {"Retry Attribute": "downtime.receipt.retry.count", "Maximum Retries": "#{Maximum Retries}", "Penalize Retries": "true", "Reuse Mode": "fail"},
       "auto_terminate": []
     },
@@ -297,7 +297,7 @@
       "name": "Retry Downtime DLQ Publish",
       "type": "org.apache.nifi.processors.standard.RetryFlowFile",
       "bundle": "standard",
-      "position": [3200, 850],
+      "position": [2400, 650],
       "properties": {"Retry Attribute": "downtime.dlq.retry.count", "Maximum Retries": "#{Maximum Retries}", "Penalize Retries": "true", "Reuse Mode": "fail"},
       "auto_terminate": []
     },
@@ -306,16 +306,17 @@
       "name": "Log Downtime Delivery Complete",
       "type": "org.apache.nifi.processors.standard.LogAttribute",
       "bundle": "standard",
-      "position": [3600, 250],
+      "position": [2700, 150],
       "properties": {"Log Level": "info", "Log Payload": "false"},
       "auto_terminate": ["success"]
     },
     {
       "key": "technical_failure",
       "name": "Log Downtime Technical Failure",
+      "layout_role": "error_sink",
       "type": "org.apache.nifi.processors.standard.LogAttribute",
       "bundle": "standard",
-      "position": [3600, 750],
+      "position": [2700, 1000],
       "properties": {"Log Level": "error", "Log Payload": "true"},
       "auto_terminate": ["success"]
     }

@@ -1,4 +1,4 @@
-.PHONY: start start-api start-kafka bootstrap-kafka produce-downtime consume-downtime load-downtime-kafka produce-downtime-replay consume-downtime-replay replay-downtime-kafka migrate-downtime test-downtime-db test-downtime-kafka test-nifi-downtime test-mvp start-nifi bootstrap-nifi bootstrap-nifi-laboratory bootstrap-nifi-downtime verify-nifi replay-nifi load-nifi-laboratory replay-nifi-laboratory verify-nifi-laboratory test-nifi-laboratory stop load-reference replay-reference verify-reference migrate-telemetry load-telemetry verify-telemetry replay-telemetry migrate-laboratory load-laboratory-valid load-laboratory-initial replay-laboratory verify-laboratory test test-api test-telemetry-db test-laboratory-db test-postgres-local
+.PHONY: start start-api start-kafka bootstrap-kafka produce-downtime consume-downtime load-downtime-kafka produce-downtime-replay consume-downtime-replay replay-downtime-kafka migrate-downtime test-downtime-db test-downtime-kafka test-nifi-downtime test-mvp start-nifi bootstrap-nifi sync-nifi-layout bootstrap-nifi-laboratory bootstrap-nifi-downtime verify-nifi replay-nifi load-nifi-laboratory replay-nifi-laboratory verify-nifi-laboratory test-nifi-laboratory stop load-reference replay-reference verify-reference migrate-telemetry load-telemetry verify-telemetry replay-telemetry migrate-laboratory load-laboratory-valid load-laboratory-initial replay-laboratory verify-laboratory test test-api test-telemetry-db test-laboratory-db test-postgres-local
 
 start:
 	docker compose up --detach --wait postgres
@@ -54,6 +54,11 @@ bootstrap-nifi:
 	./scripts/bootstrap-nifi.py
 	./scripts/bootstrap-nifi-laboratory.sh
 	./scripts/bootstrap-nifi-downtime.sh
+
+sync-nifi-layout:
+	./scripts/bootstrap-nifi.py --sync-layout
+	./scripts/bootstrap-nifi-laboratory.sh --sync-layout
+	./scripts/bootstrap-nifi-downtime.sh --sync-layout
 
 bootstrap-nifi-laboratory:
 	./scripts/bootstrap-nifi-laboratory.sh

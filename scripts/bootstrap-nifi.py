@@ -185,22 +185,28 @@ def find_process_group(client: NifiClient, name: str) -> dict[str, Any] | None:
     return None
 
 
+def process_group_comments(flow_spec: dict[str, Any], digest: str) -> str:
+    return f"{flow_spec['flow']['comments']} Spec SHA-256: {digest}"
+
+
 def create_process_group(
     client: NifiClient,
     flow_spec: dict[str, Any],
     context_id: str,
     digest: str,
     position: tuple[float, float],
+    sync_layout: bool = False,
 ) -> dict[str, Any]:
     flow = flow_spec["flow"]
-    comments = f"{flow['comments']} Spec SHA-256: {digest}"
+    comments = process_group_comments(flow_spec, digest)
     existing = find_process_group(client, flow["name"])
     if existing is not None:
         existing_comments = existing.get("component", {}).get("comments", "")
-        if digest not in existing_comments:
+        if digest not in existing_comments and not sync_layout:
             raise NifiError(
                 f"The existing {flow['name']} process group was created from another "
-                "specification. Reset the NiFi volumes before provisioning this version."
+                "specification. Reset the NiFi volumes, or use --sync-layout only when "
+                "the specification change is limited to canvas layout."
             )
         return existing
 
@@ -215,6 +221,23 @@ def create_process_group(
                 "position": {"x": position[0], "y": position[1]},
                 "parameterContext": {"id": context_id},
             },
+        },
+    )
+
+
+def set_process_group_comments(
+    client: NifiClient, group: dict[str, Any], comments: str
+) -> dict[str, Any]:
+    component = group["component"]
+    if component.get("comments", "") == comments:
+        return group
+    group_id = group.get("id") or component["id"]
+    return client.request(
+        "PUT",
+        f"/process-groups/{group_id}",
+        payload={
+            "revision": revision(group),
+            "component": {"id": group_id, "comments": comments},
         },
     )
 
@@ -409,6 +432,47 @@ def connection_bends(spec: dict[str, Any]) -> dict[tuple[str, str, str], list[di
             bends[connection] = [
                 {"x": midpoint_x, "y": midpoint_y + direction * distance}
             ]
+
+    error_sinks = {
+        item["key"]
+        for item in spec["processors"]
+        if item.get("layout_role") == "error_sink"
+    }
+    for sink_key in error_sinks:
+        incoming = sorted(
+            (
+                tuple(connection)
+                for connection in spec["connections"]
+                if connection[2] == sink_key
+            ),
+            key=lambda connection: (
+                positions[connection[0]][0], positions[connection[0]][1]
+            ),
+        )
+        sink_x, sink_y = positions[sink_key]
+        rail_start = sink_y - max(160.0, 24.0 * (len(incoming) - 1))
+        for index, connection in enumerate(incoming):
+            source_x, _ = positions[connection[0]]
+            rail_y = rail_start + index * 24.0
+            bends[connection] = [
+                {"x": source_x + 270.0, "y": rail_y},
+                {"x": sink_x - 100.0, "y": rail_y},
+            ]
+
+    for route in spec.get("connection_bends", []):
+        connection = (
+            route["source"],
+            route["relationship"],
+            route["destination"],
+        )
+        if list(connection) not in spec["connections"]:
+            raise NifiError(
+                f"Layout route references an unknown connection: {connection}"
+            )
+        bends[connection] = [
+            {"x": float(point[0]), "y": float(point[1])}
+            for point in route["points"]
+        ]
     return bends
 
 
@@ -499,13 +563,40 @@ def synchronize_connection_bends(
         )
 
 
+def synchronize_processor_positions(
+    client: NifiClient,
+    spec: dict[str, Any],
+    processor_entities: list[dict[str, Any]],
+) -> None:
+    desired_by_name = {
+        item["name"]: {"x": item["position"][0], "y": item["position"][1]}
+        for item in spec["processors"]
+    }
+    for entity in processor_entities:
+        component = entity["component"]
+        desired = desired_by_name.get(component["name"])
+        if desired is None or component.get("position", {}) == desired:
+            continue
+        client.request(
+            "PUT",
+            f"/processors/{entity['id']}",
+            payload={
+                "revision": revision(entity),
+                "component": {"id": entity["id"], "position": desired},
+            },
+        )
+
+
 def group_processors(client: NifiClient, group_id: str) -> list[dict[str, Any]]:
     response = client.request("GET", f"/process-groups/{group_id}/processors")
     return response.get("processors", [])
 
 
 def validate_existing_group(
-    client: NifiClient, group_id: str, spec: dict[str, Any]
+    client: NifiClient,
+    group_id: str,
+    spec: dict[str, Any],
+    sync_layout: bool = False,
 ) -> None:
     expected = {item["name"] for item in spec["processors"]}
     processor_entities = group_processors(client, group_id)
@@ -552,6 +643,8 @@ def validate_existing_group(
             "Existing process group is incomplete; reset the NiFi flow volume. "
             "Missing connections: " + ", ".join(missing_connections)
         )
+    if sync_layout:
+        synchronize_processor_positions(client, spec, processor_entities)
     synchronize_connection_bends(client, group_id, spec, processors_by_key)
 
 
@@ -668,6 +761,7 @@ def provision(
     client: NifiClient,
     spec_path: Path,
     group_position: tuple[float, float],
+    sync_layout: bool = False,
 ) -> str:
     spec = load_spec(spec_path)
     digest = spec_digest(spec_path)
@@ -675,11 +769,17 @@ def provision(
     context_id = context.get("id") or context["component"]["id"]
 
     existing = find_process_group(client, spec["flow"]["name"])
-    group = create_process_group(client, spec, context_id, digest, group_position)
+    group = create_process_group(
+        client, spec, context_id, digest, group_position, sync_layout
+    )
     group = set_process_group_position(client, group, group_position)
     group_id = group.get("id") or group["component"]["id"]
     if existing is not None:
-        validate_existing_group(client, group_id, spec)
+        validate_existing_group(client, group_id, spec, sync_layout)
+        if sync_layout:
+            group = set_process_group_comments(
+                client, group, process_group_comments(spec, digest)
+            )
         validate_processors(client, group_id)
         start_configured_processors(client, group_id, spec)
         return group_id
@@ -716,6 +816,14 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--wait-seconds", type=int, default=300)
     parser.add_argument(
+        "--sync-layout",
+        action="store_true",
+        help=(
+            "Apply processor positions and connection bends to a structurally "
+            "matching existing group; use only for layout-only specification changes"
+        ),
+    )
+    parser.add_argument(
         "--run-once",
         action="store_true",
         help="Stop the periodic trigger and request one immediate poll",
@@ -741,7 +849,9 @@ def main() -> int:
     try:
         spec = load_spec(args.spec)
         client.wait_until_ready(args.wait_seconds)
-        group_id = provision(client, args.spec, args.group_position)
+        group_id = provision(
+            client, args.spec, args.group_position, sync_layout=args.sync_layout
+        )
         if args.run_once:
             trigger_name = args.trigger or spec["flow"].get("run_once_trigger")
             if trigger_name is None and args.spec.resolve() == DEFAULT_SPEC.resolve():

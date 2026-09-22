@@ -171,6 +171,122 @@ class NifiBootstrapHelperTest(unittest.TestCase):
             bends[("destination", "retry", "source")],
         )
 
+    def test_layout_sync_updates_only_changed_processor_positions(self) -> None:
+        class RecordingClient:
+            def __init__(self) -> None:
+                self.requests = []
+
+            def request(self, method, path, payload=None):
+                self.requests.append((method, path, payload))
+
+        client = RecordingClient()
+        spec = {
+            "processors": [
+                {"name": "Already placed", "position": [0, 0]},
+                {"name": "Move me", "position": [350, 175]},
+            ]
+        }
+        entities = [
+            {
+                "id": "placed-id",
+                "revision": {"version": 1},
+                "component": {
+                    "name": "Already placed",
+                    "position": {"x": 0, "y": 0},
+                },
+            },
+            {
+                "id": "move-id",
+                "revision": {"version": 7},
+                "component": {
+                    "name": "Move me",
+                    "position": {"x": 10, "y": 20},
+                },
+            },
+        ]
+
+        self.bootstrap.synchronize_processor_positions(client, spec, entities)
+
+        self.assertEqual(
+            client.requests,
+            [
+                (
+                    "PUT",
+                    "/processors/move-id",
+                    {
+                        "revision": {"version": 7},
+                        "component": {
+                            "id": "move-id",
+                            "position": {"x": 350, "y": 175},
+                        },
+                    },
+                )
+            ],
+        )
+
+    def test_error_sink_connections_use_separate_layout_rails(self) -> None:
+        spec = {
+            "processors": [
+                {"key": "first", "position": [0, 0]},
+                {"key": "second", "position": [300, 0]},
+                {
+                    "key": "failure",
+                    "position": [900, 600],
+                    "layout_role": "error_sink",
+                },
+            ],
+            "connections": [
+                ["first", "failure", "failure"],
+                ["second", "failure", "failure"],
+            ],
+        }
+
+        bends = self.bootstrap.connection_bends(spec)
+
+        first = bends[("first", "failure", "failure")]
+        second = bends[("second", "failure", "failure")]
+        self.assertEqual(len(first), 2)
+        self.assertEqual(len(second), 2)
+        self.assertNotEqual(first[0]["y"], second[0]["y"])
+        self.assertEqual(first[1]["x"], 800.0)
+        self.assertEqual(second[1]["x"], 800.0)
+
+    def test_explicit_connection_bends_override_automatic_layout(self) -> None:
+        spec = {
+            "processors": [
+                {"key": "source", "position": [0, 0]},
+                {"key": "destination", "position": [300, 0]},
+            ],
+            "connections": [["source", "success", "destination"]],
+            "connection_bends": [
+                {
+                    "source": "source",
+                    "relationship": "success",
+                    "destination": "destination",
+                    "points": [[100, 200], [250, 200]],
+                }
+            ],
+        }
+
+        bends = self.bootstrap.connection_bends(spec)
+
+        self.assertEqual(
+            bends[("source", "success", "destination")],
+            [{"x": 100.0, "y": 200.0}, {"x": 250.0, "y": 200.0}],
+        )
+
+    def test_managed_flows_use_compact_non_overlapping_layouts(self) -> None:
+        for spec_path in sorted((ROOT / "nifi").glob("*-flow.json")):
+            spec = json.loads(spec_path.read_text(encoding="utf-8"))
+            positions = [tuple(item["position"]) for item in spec["processors"]]
+            xs = [position[0] for position in positions]
+            ys = [position[1] for position in positions]
+
+            with self.subTest(spec=spec_path.name):
+                self.assertEqual(len(positions), len(set(positions)))
+                self.assertLessEqual(max(xs) - min(xs), 3000)
+                self.assertLessEqual(max(ys) - min(ys), 1800)
+
 
 if __name__ == "__main__":
     unittest.main()
