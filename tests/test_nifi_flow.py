@@ -1,3 +1,4 @@
+import argparse
 import importlib.util
 import json
 import unittest
@@ -146,6 +147,28 @@ class NifiBootstrapHelperTest(unittest.TestCase):
         }
         self.assertEqual(
             self.bootstrap.relationship_name(processor, "no retry"), "No Retry"
+        )
+
+    def test_root_process_group_position_is_parsed(self) -> None:
+        self.assertEqual(self.bootstrap.parse_position("600,0"), (600.0, 0.0))
+        with self.assertRaises(argparse.ArgumentTypeError):
+            self.bootstrap.parse_position("600")
+
+    def test_parallel_connections_receive_distinct_bends(self) -> None:
+        spec = {
+            "processors": [
+                {"key": "source", "position": [0, 0]},
+                {"key": "destination", "position": [400, 0]},
+            ],
+            "connections": [
+                ["source", "failure", "destination"],
+                ["destination", "retry", "source"],
+            ],
+        }
+        bends = self.bootstrap.connection_bends(spec)
+        self.assertNotEqual(
+            bends[("source", "failure", "destination")],
+            bends[("destination", "retry", "source")],
         )
 
 

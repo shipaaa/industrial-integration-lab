@@ -113,6 +113,16 @@ def spec_digest(spec_path: Path) -> str:
     return hashlib.sha256(spec_path.read_bytes()).hexdigest()
 
 
+def parse_position(value: str) -> tuple[float, float]:
+    try:
+        x_text, y_text = value.split(",", 1)
+        return float(x_text), float(y_text)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(
+            "position must use the X,Y format, for example 600,0"
+        ) from error
+
+
 def load_spec(spec_path: Path) -> dict[str, Any]:
     with spec_path.open(encoding="utf-8") as source:
         spec = json.load(source)
@@ -180,6 +190,7 @@ def create_process_group(
     flow_spec: dict[str, Any],
     context_id: str,
     digest: str,
+    position: tuple[float, float],
 ) -> dict[str, Any]:
     flow = flow_spec["flow"]
     comments = f"{flow['comments']} Spec SHA-256: {digest}"
@@ -201,8 +212,31 @@ def create_process_group(
             "component": {
                 "name": flow["name"],
                 "comments": comments,
-                "position": {"x": 0, "y": 0},
+                "position": {"x": position[0], "y": position[1]},
                 "parameterContext": {"id": context_id},
+            },
+        },
+    )
+
+
+def set_process_group_position(
+    client: NifiClient,
+    group: dict[str, Any],
+    position: tuple[float, float],
+) -> dict[str, Any]:
+    component = group["component"]
+    current = component.get("position", {})
+    if current.get("x") == position[0] and current.get("y") == position[1]:
+        return group
+    group_id = group.get("id") or component["id"]
+    return client.request(
+        "PUT",
+        f"/process-groups/{group_id}",
+        payload={
+            "revision": revision(group),
+            "component": {
+                "id": group_id,
+                "position": {"x": position[0], "y": position[1]},
             },
         },
     )
@@ -346,12 +380,45 @@ def relationship_name(processor: dict[str, Any], requested: str) -> str:
     )
 
 
+def connection_bends(spec: dict[str, Any]) -> dict[tuple[str, str, str], list[dict[str, float]]]:
+    positions = {
+        item["key"]: (float(item["position"][0]), float(item["position"][1]))
+        for item in spec["processors"]
+    }
+    connections_by_endpoints: dict[
+        tuple[str, str], list[tuple[str, str, str]]
+    ] = {}
+    for source_key, relationship, destination_key in spec["connections"]:
+        connection = (source_key, relationship, destination_key)
+        connections_by_endpoints.setdefault(
+            tuple(sorted((source_key, destination_key))), []
+        ).append(connection)
+
+    bends: dict[tuple[str, str, str], list[dict[str, float]]] = {}
+    for connections in connections_by_endpoints.values():
+        if len(connections) < 2:
+            continue
+        source_key, _, destination_key = connections[0]
+        source_x, source_y = positions[source_key]
+        destination_x, destination_y = positions[destination_key]
+        midpoint_x = (source_x + destination_x) / 2
+        midpoint_y = (source_y + destination_y) / 2
+        for index, connection in enumerate(connections):
+            direction = 1 if index % 2 == 0 else -1
+            distance = 120.0 * (index // 2 + 1)
+            bends[connection] = [
+                {"x": midpoint_x, "y": midpoint_y + direction * distance}
+            ]
+    return bends
+
+
 def create_connections(
     client: NifiClient,
     group_id: str,
     spec: dict[str, Any],
     processors: dict[str, dict[str, Any]],
 ) -> None:
+    bends_by_connection = connection_bends(spec)
     for source_key, requested_relationship, destination_key in spec["connections"]:
         source = processors[source_key]
         destination = processors[destination_key]
@@ -377,10 +444,57 @@ def create_connections(
                         "type": "PROCESSOR",
                     },
                     "selectedRelationships": [selected_relationship],
+                    "bends": bends_by_connection.get(
+                        (source_key, requested_relationship, destination_key), []
+                    ),
                     "flowFileExpiration": "0 sec",
                     "backPressureObjectThreshold": 1000,
                     "backPressureDataSizeThreshold": "100 MB",
                 },
+            },
+        )
+
+
+def synchronize_connection_bends(
+    client: NifiClient,
+    group_id: str,
+    spec: dict[str, Any],
+    processors_by_key: dict[str, dict[str, Any]],
+) -> None:
+    desired_by_connection: dict[tuple[str, str, str], list[dict[str, float]]] = {}
+    for (source_key, relationship, destination_key), bends in connection_bends(
+        spec
+    ).items():
+        source = processors_by_key[source_key]
+        destination = processors_by_key[destination_key]
+        desired_by_connection[
+            (
+                source["id"],
+                relationship_name(source, relationship).casefold(),
+                destination["id"],
+            )
+        ] = bends
+
+    response = client.request("GET", f"/process-groups/{group_id}/connections")
+    for entity in response.get("connections", []):
+        component = entity["component"]
+        relationships = component.get("selectedRelationships", [])
+        if len(relationships) != 1:
+            continue
+        key = (
+            component["source"]["id"],
+            relationships[0].casefold(),
+            component["destination"]["id"],
+        )
+        desired = desired_by_connection.get(key, [])
+        if component.get("bends", []) == desired:
+            continue
+        client.request(
+            "PUT",
+            f"/connections/{entity['id']}",
+            payload={
+                "revision": revision(entity),
+                "component": {"id": entity["id"], "bends": desired},
             },
         )
 
@@ -438,6 +552,7 @@ def validate_existing_group(
             "Existing process group is incomplete; reset the NiFi flow volume. "
             "Missing connections: " + ", ".join(missing_connections)
         )
+    synchronize_connection_bends(client, group_id, spec, processors_by_key)
 
 
 def start_process_group(client: NifiClient, group_id: str) -> None:
@@ -549,14 +664,19 @@ def validate_processors(client: NifiClient, group_id: str) -> None:
         raise NifiError("Invalid NiFi processors:\n- " + "\n- ".join(invalid))
 
 
-def provision(client: NifiClient, spec_path: Path) -> str:
+def provision(
+    client: NifiClient,
+    spec_path: Path,
+    group_position: tuple[float, float],
+) -> str:
     spec = load_spec(spec_path)
     digest = spec_digest(spec_path)
     context = create_parameter_context(client, spec["parameter_context"])
     context_id = context.get("id") or context["component"]["id"]
 
     existing = find_process_group(client, spec["flow"]["name"])
-    group = create_process_group(client, spec, context_id, digest)
+    group = create_process_group(client, spec, context_id, digest, group_position)
+    group = set_process_group_position(client, group, group_position)
     group_id = group.get("id") or group["component"]["id"]
     if existing is not None:
         validate_existing_group(client, group_id, spec)
@@ -587,6 +707,13 @@ def parse_args() -> argparse.Namespace:
         default=os.getenv("NIFI_PASSWORD", "plantbridge_nifi_dev_2026"),
     )
     parser.add_argument("--spec", type=Path, default=DEFAULT_SPEC)
+    parser.add_argument(
+        "--group-position",
+        type=parse_position,
+        default=(0.0, 0.0),
+        metavar="X,Y",
+        help="Root-canvas position for the managed process group",
+    )
     parser.add_argument("--wait-seconds", type=int, default=300)
     parser.add_argument(
         "--run-once",
@@ -614,7 +741,7 @@ def main() -> int:
     try:
         spec = load_spec(args.spec)
         client.wait_until_ready(args.wait_seconds)
-        group_id = provision(client, args.spec)
+        group_id = provision(client, args.spec, args.group_position)
         if args.run_once:
             trigger_name = args.trigger or spec["flow"].get("run_once_trigger")
             if trigger_name is None and args.spec.resolve() == DEFAULT_SPEC.resolve():
