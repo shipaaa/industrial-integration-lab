@@ -13,7 +13,7 @@ created directly from the tagged MVP.
 - Store images in `docs/assets/demo/` using the filenames below.
 - Do not edit database rows or rejected payloads to improve the screenshots.
 
-## Required screenshots
+## Required evidence images
 
 ### 01 — NiFi process-group overview
 
@@ -66,9 +66,10 @@ Run:
 make test-mvp
 ```
 
-Capture the final terminal section containing:
+After the command exits successfully, capture the final terminal section or a
+local result view built from that same run containing:
 
-- 42 passing static tests;
+- 44 passing static tests;
 - the successful NiFi downtime E2E line;
 - the final BATCH-003 row;
 - `24`, `TEL-0024`, `2`, `6`, and `0` in the summary;
@@ -97,6 +98,8 @@ docker compose exec -T postgres psql \
   "
 ```
 
+Capture the query output or a local result view built from that output.
+
 Acceptance: BATCH-003 is `FAIL`, has one process deviation, 7 downtime minutes,
 and an above-limit `melt_temperature_c` measurement.
 
@@ -120,6 +123,8 @@ docker compose exec -T postgres psql \
   "
 ```
 
+Capture the query output or a local result view built from that output.
+
 Acceptance: both the laboratory and downtime corrections show `REPLAYED` and
 an `ACCEPTED` replay outcome.
 
@@ -132,6 +137,6 @@ make test-mvp
 git status --short
 ```
 
-Only this checklist, the intended images, and the corresponding README links
-should be tracked. The unrelated `digitized_photos/` directory must remain
-untracked and untouched.
+Only the intended NiFi layout changes and tests, this checklist, the evidence
+images, and the corresponding README links should be tracked. The unrelated
+`digitized_photos/` directory must remain untracked and untouched.

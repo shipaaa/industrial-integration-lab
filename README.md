@@ -154,6 +154,13 @@ minutes, and zero reconciliation failures. The 10–15 minute operator sequence
 and recovery checks are in
 [`docs/07-runbooks/mvp-demo.md`](docs/07-runbooks/mvp-demo.md).
 
+Verified demo evidence is collected in
+[`docs/08-demo-evidence.md`](docs/08-demo-evidence.md). The evidence set includes
+the [NiFi process-group overview](docs/assets/demo/01-nifi-process-groups.png),
+the [full MVP smoke result](docs/assets/demo/05-mvp-smoke-result.png), the
+[BATCH-003 dossier](docs/assets/demo/06-batch-003-dossier.png), and the
+[rejection/replay lineage](docs/assets/demo/07-rejection-replay-lineage.png).
+
 ## Technology Stack
 
 - **API:** Python, FastAPI
