@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  contract-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Prepare local demo configuration
+        run: cp .env.example .env
+
+      - name: Validate shell scripts
+        run: bash -n scripts/*.sh
+
+      - name: Validate Docker Compose
+        run: docker compose config --quiet
+
+      - name: Run contract tests
+        run: make test

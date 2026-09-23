@@ -1,8 +1,10 @@
 import argparse
 import importlib.util
 import json
+import os
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -132,6 +134,24 @@ class NifiBootstrapHelperTest(unittest.TestCase):
         )
         self.assertEqual(bundle["artifact"], "nifi-update-attribute-nar")
         self.assertEqual(bundle["version"], "2.10.0")
+
+    def test_sensitive_spec_value_is_loaded_from_environment(self) -> None:
+        with mock.patch.dict(
+            os.environ, {"POSTGRES_PASSWORD": "test-secret"}, clear=False
+        ):
+            spec = self.bootstrap.load_spec(SPEC_PATH)
+        parameters = {
+            item["name"]: item
+            for item in spec["parameter_context"]["parameters"]
+        }
+        self.assertEqual(parameters["PostgreSQL Password"]["value"], "test-secret")
+
+    def test_missing_sensitive_environment_value_is_rejected(self) -> None:
+        with mock.patch.dict(os.environ, {}, clear=True):
+            with self.assertRaisesRegex(
+                self.bootstrap.NifiError, "POSTGRES_PASSWORD is required"
+            ):
+                self.bootstrap.load_spec(SPEC_PATH)
 
     def test_service_references_are_resolved(self) -> None:
         resolved = self.bootstrap.resolve_service_references(

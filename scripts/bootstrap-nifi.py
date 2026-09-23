@@ -19,10 +19,45 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SPEC = ROOT / "nifi" / "telemetry-flow.json"
+ENV_FILE = ROOT / ".env"
 
 
 class NifiError(RuntimeError):
     pass
+
+
+def load_project_env(path: Path = ENV_FILE) -> None:
+    """Load simple KEY=VALUE entries without adding a runtime dependency."""
+    if not path.exists():
+        return
+    for line_number, raw_line in enumerate(
+        path.read_text(encoding="utf-8").splitlines(), start=1
+    ):
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" not in line:
+            raise NifiError(f"Invalid {path.name} entry on line {line_number}")
+        name, value = line.split("=", 1)
+        name = name.strip()
+        if not name:
+            raise NifiError(f"Invalid {path.name} key on line {line_number}")
+        os.environ.setdefault(name, value.strip())
+
+
+def resolve_environment_placeholders(value: Any) -> Any:
+    if not isinstance(value, str):
+        return value
+    if value.startswith("${") and value.endswith("}"):
+        variable = value[2:-1]
+        resolved = os.getenv(variable)
+        if not resolved:
+            raise NifiError(
+                f"Environment variable {variable} is required; "
+                "copy .env.example to .env"
+            )
+        return resolved
+    return value
 
 
 class NifiClient:
@@ -128,6 +163,8 @@ def load_spec(spec_path: Path) -> dict[str, Any]:
         spec = json.load(source)
     if spec.get("schema_version") != "1.0":
         raise NifiError("Unsupported NiFi flow specification schema_version")
+    for parameter in spec.get("parameter_context", {}).get("parameters", []):
+        parameter["value"] = resolve_environment_placeholders(parameter.get("value"))
     return spec
 
 
@@ -800,11 +837,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--username",
-        default=os.getenv("NIFI_USERNAME", "plantbridge-admin"),
+        default=os.getenv("NIFI_USERNAME"),
     )
     parser.add_argument(
         "--password",
-        default=os.getenv("NIFI_PASSWORD", "plantbridge_nifi_dev_2026"),
+        default=os.getenv("NIFI_PASSWORD"),
     )
     parser.add_argument("--spec", type=Path, default=DEFAULT_SPEC)
     parser.add_argument(
@@ -844,7 +881,19 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
+    try:
+        load_project_env()
+    except NifiError as error:
+        print(f"NiFi bootstrap failed: {error}", file=sys.stderr)
+        return 1
     args = parse_args()
+    if not args.username or not args.password:
+        print(
+            "NiFi bootstrap failed: NIFI_USERNAME and NIFI_PASSWORD are required; "
+            "copy .env.example to .env",
+            file=sys.stderr,
+        )
+        return 1
     client = NifiClient(args.url, args.username, args.password)
     try:
         spec = load_spec(args.spec)

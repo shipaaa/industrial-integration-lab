@@ -42,7 +42,7 @@
       },
       {
         "name": "PostgreSQL Password",
-        "value": "plantbridge_dev",
+        "value": "${POSTGRES_PASSWORD}",
         "sensitive": true
       },
       {

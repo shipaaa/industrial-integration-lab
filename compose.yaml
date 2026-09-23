@@ -24,7 +24,7 @@ services:
     environment:
       POSTGRES_DB: plantbridge
       POSTGRES_USER: plantbridge
-      POSTGRES_PASSWORD: plantbridge_dev
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Copy .env.example to .env}
     ports:
       - "5432:5432"
     volumes:
@@ -92,8 +92,8 @@ services:
       dockerfile: nifi/Dockerfile
     hostname: nifi
     environment:
-      SINGLE_USER_CREDENTIALS_USERNAME: plantbridge-admin
-      SINGLE_USER_CREDENTIALS_PASSWORD: plantbridge_nifi_dev_2026
+      SINGLE_USER_CREDENTIALS_USERNAME: ${NIFI_USERNAME:?Copy .env.example to .env}
+      SINGLE_USER_CREDENTIALS_PASSWORD: ${NIFI_PASSWORD:?Copy .env.example to .env}
       NIFI_WEB_HTTPS_PORT: "8443"
       NIFI_JVM_HEAP_INIT: 1g
       NIFI_JVM_HEAP_MAX: 1g

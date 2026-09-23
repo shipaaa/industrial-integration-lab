@@ -24,7 +24,7 @@
       {"name": "Downtime Replay Group ID", "value": "plantbridge-nifi-downtime-replay-v1", "sensitive": false},
       {"name": "PostgreSQL JDBC URL", "value": "jdbc:postgresql://postgres:5432/plantbridge", "sensitive": false},
       {"name": "PostgreSQL User", "value": "plantbridge", "sensitive": false},
-      {"name": "PostgreSQL Password", "value": "plantbridge_dev", "sensitive": true},
+      {"name": "PostgreSQL Password", "value": "${POSTGRES_PASSWORD}", "sensitive": true},
       {"name": "Maximum Retries", "value": "3", "sensitive": false}
     ]
   },

@@ -14,14 +14,14 @@ health checks; creates the Parameter Context and process group; enables the
 controller services; and starts the processors.
 
 Open `https://localhost:8443/nifi` and accept the local self-signed certificate.
-Development login:
+Development login values are read from the local `.env` file. Create it once:
 
-```text
-username: plantbridge-admin
-password: plantbridge_nifi_dev_2026
+```bash
+cp .env.example .env
 ```
 
-These credentials are only for the isolated local lab.
+The example credentials are only for the isolated local lab. Replace them in
+`.env` if the host is shared; `.env` is ignored by Git.
 
 ## Verify
 
