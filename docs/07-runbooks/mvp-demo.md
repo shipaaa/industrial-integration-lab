@@ -67,6 +67,10 @@ GROUP BY status;
 3. Run `make bootstrap-nifi` to validate the Git-managed flows.
 4. For a full deterministic recovery check, rerun `make test-mvp`.
 
+After pulling a layout-only NiFi change into an existing local environment, run
+`make sync-nifi-layout`. It updates processor positions and connection bends;
+processor properties, queues, and business data are left unchanged.
+
 Do not edit ODS or rejected payloads manually. Database and Kafka technical
 failures use bounded NiFi retries; downtime offsets are acknowledged only after
 the database result and transactional receipt/DLQ publish succeed. Redelivery is

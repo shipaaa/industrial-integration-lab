@@ -103,7 +103,7 @@
       "name": "Read Composite Watermark",
       "type": "org.apache.nifi.processors.standard.ExecuteSQLRecord",
       "bundle": "standard",
-      "position": [400, 0],
+      "position": [350, 0],
       "properties": {
         "Database Connection Pooling Service": "@service:postgres_pool",
         "Record Writer": "@service:json_writer",
@@ -116,7 +116,7 @@
       "name": "Extract Composite Watermark",
       "type": "org.apache.nifi.processors.standard.EvaluateJsonPath",
       "bundle": "standard",
-      "position": [800, 0],
+      "position": [700, 0],
       "properties": {
         "Destination": "flowfile-attribute",
         "Return Type": "auto-detect",
@@ -131,7 +131,7 @@
       "name": "Build Telemetry Request",
       "type": "org.apache.nifi.processors.attributes.UpdateAttribute",
       "bundle": "update-attribute",
-      "position": [1200, 0],
+      "position": [1050, 0],
       "properties": {
         "telemetry.request.url": "#{Telemetry API Base URL}/telemetry?updated_since=${telemetry.updated_since:urlEncode()}&after_record_id=${telemetry.after_record_id:urlEncode()}&page_size=#{Telemetry Page Size}"
       },
@@ -142,7 +142,7 @@
       "name": "Invoke Telemetry API",
       "type": "org.apache.nifi.processors.standard.InvokeHTTP",
       "bundle": "standard",
-      "position": [1600, 0],
+      "position": [1400, 0],
       "properties": {
         "HTTP Method": "GET",
         "HTTP URL": "${telemetry.request.url}",
@@ -158,7 +158,7 @@
       "name": "Retry Source Request",
       "type": "org.apache.nifi.processors.standard.RetryFlowFile",
       "bundle": "standard",
-      "position": [1600, 400],
+      "position": [1400, -350],
       "properties": {
         "Retry Attribute": "telemetry.http.retry.count",
         "Maximum Retries": "#{Maximum Retries}",
@@ -172,7 +172,7 @@
       "name": "Extract Page Control Fields",
       "type": "org.apache.nifi.processors.standard.EvaluateJsonPath",
       "bundle": "standard",
-      "position": [2000, 0],
+      "position": [1400, 350],
       "properties": {
         "Destination": "flowfile-attribute",
         "Return Type": "auto-detect",
@@ -189,7 +189,7 @@
       "name": "Capture Page Payload",
       "type": "org.apache.nifi.processors.standard.ExtractText",
       "bundle": "standard",
-      "position": [2400, 0],
+      "position": [1050, 350],
       "properties": {
         "Character Set": "UTF-8",
         "Maximum Capture Group Length": "1048576",
@@ -202,7 +202,7 @@
       "name": "Prepare Page Transaction",
       "type": "org.apache.nifi.processors.attributes.UpdateAttribute",
       "bundle": "update-attribute",
-      "position": [2800, 0],
+      "position": [700, 350],
       "properties": {
         "sql.args.1.type": "12",
         "sql.args.1.value": "${telemetry.page}",
@@ -218,7 +218,7 @@
       "name": "Load Telemetry Page",
       "type": "org.apache.nifi.processors.standard.ExecuteSQL",
       "bundle": "standard",
-      "position": [3200, 0],
+      "position": [350, 350],
       "properties": {
         "Database Connection Pooling Service": "@service:postgres_pool",
         "SQL Query": "SELECT ods.load_telemetry_page(?::jsonb, ?::text, ?::text)",
@@ -232,7 +232,7 @@
       "name": "Retry Database Transaction",
       "type": "org.apache.nifi.processors.standard.RetryFlowFile",
       "bundle": "standard",
-      "position": [3200, 400],
+      "position": [700, 700],
       "properties": {
         "Retry Attribute": "telemetry.db.retry.count",
         "Maximum Retries": "#{Maximum Retries}",
@@ -246,7 +246,7 @@
       "name": "Continue While Has More",
       "type": "org.apache.nifi.processors.standard.RouteOnAttribute",
       "bundle": "standard",
-      "position": [3600, 0],
+      "position": [0, 350],
       "properties": {
         "Routing Strategy": "Route to Property name",
         "continue": "${telemetry.has_more:equals('true')}"
@@ -258,7 +258,7 @@
       "name": "Advance Request Watermark",
       "type": "org.apache.nifi.processors.attributes.UpdateAttribute",
       "bundle": "update-attribute",
-      "position": [3600, -400],
+      "position": [350, 700],
       "properties": {
         "telemetry.updated_since": "${telemetry.next_updated_at}",
         "telemetry.after_record_id": "${telemetry.next_record_id}",
@@ -272,7 +272,7 @@
       "name": "Log Completed Poll",
       "type": "org.apache.nifi.processors.standard.LogAttribute",
       "bundle": "standard",
-      "position": [4000, 0],
+      "position": [0, 700],
       "properties": {
         "Log Level": "info",
         "Log Payload": "false"
@@ -282,9 +282,10 @@
     {
       "key": "failure",
       "name": "Log Technical Failure",
+      "layout_role": "error_sink",
       "type": "org.apache.nifi.processors.standard.LogAttribute",
       "bundle": "standard",
-      "position": [4000, 400],
+      "position": [1750, 1050],
       "properties": {
         "Log Level": "error",
         "Log Payload": "true"
@@ -319,5 +320,13 @@
     ["route_more", "continue", "prepare_next"],
     ["route_more", "unmatched", "complete"],
     ["prepare_next", "success", "build_request"]
+  ],
+  "connection_bends": [
+    {
+      "source": "prepare_next",
+      "relationship": "success",
+      "destination": "build_request",
+      "points": [[-200, 850], [-200, -180], [1050, -180]]
+    }
   ]
 }
