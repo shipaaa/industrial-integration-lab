@@ -2,6 +2,10 @@
 
 **Polymer Production Quality & Downtime**
 
+[![CI](https://github.com/shipaaa/industrial-integration-lab/actions/workflows/ci.yml/badge.svg)](https://github.com/shipaaa/industrial-integration-lab/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Status: Demo-ready MVP](https://img.shields.io/badge/status-demo--ready%20MVP-2ea44f.svg)](docs/07-runbooks/mvp-demo.md)
+
 Portfolio-grade industrial data integration project demonstrating how equipment telemetry, laboratory quality results, reference data, and downtime events can be ingested, validated, reconciled, and prepared for analysis.
 
 The lab is designed to demonstrate the practical responsibilities of a Middle Technical Implementation Engineer: discovery, source analysis, solution design, data mapping, integration development, testing, deployment planning, troubleshooting, and operational handover.
@@ -9,6 +13,33 @@ The lab is designed to demonstrate the practical responsibilities of a Middle Te
 > **Project status:** Demo-ready MVP. All four source channels are executable,
 > all three NiFi process groups are reproducibly provisioned from Git, and one
 > Docker smoke test verifies the complete BATCH-003 investigation path.
+
+![Verified MVP smoke test](docs/assets/demo/05-mvp-smoke-result.png)
+
+## What this project proves
+
+| Area | Demonstrated outcome |
+|---|---|
+| Sources | REST telemetry, laboratory CSV, reference JSON, and Kafka downtime events |
+| Orchestration | Three Git-managed Apache NiFi process groups with bounded retries |
+| Reliability | Watermarks, idempotency, duplicate handling, DLQ, correction replay, and reconciliation |
+| Investigation | One BATCH-003 dossier links a failed lab result to a process deviation and 7 downtime minutes |
+| Acceptance | One deterministic Docker command verifies the complete integration path |
+
+## Quick start
+
+Prerequisites: Docker Desktop with Compose v2 and Python 3.9 or newer.
+
+```bash
+cp .env.example .env
+make test
+make test-mvp
+```
+
+`make test` runs the fast contract suite. `make test-mvp` builds the full local
+stack and exercises all four sources, replay paths, idempotency, reconciliation,
+and the final investigation mart. See the
+[10–15 minute demo runbook](docs/07-runbooks/mvp-demo.md) for the operator flow.
 
 ## Business Scenario
 
@@ -31,7 +62,7 @@ The integration platform will connect these datasets so that production and qual
 - Were all expected source records loaded exactly once?
 - Can rejected or missed data be safely corrected and replayed?
 
-## Planned Solution
+## Architecture
 
 ```mermaid
 flowchart LR
@@ -43,25 +74,25 @@ flowchart LR
     NIFI --> STG["PostgreSQL STG"]
     LOADER --> STG
     STG --> ODS["PostgreSQL ODS"]
-    ODS --> DDS["PostgreSQL DDS"]
-    DDS --> DM["PostgreSQL DM"]
+    ODS --> DM["PostgreSQL DM"]
+    ODS -. "post-MVP" .-> DDS["Reserved DDS"]
 
     NIFI --> REJECTED["Rejected records"]
     KAFKA --> DLQ["Kafka DLQ"]
 ```
 
-The complete environment is intended to run locally through Docker Compose and contain:
+The MVP environment runs locally through Docker Compose and contains:
 
 - a FastAPI application that simulates the telemetry source system;
 - Apache NiFi for ingestion, validation, routing, retry, and failure handling;
 - a single-broker Kafka setup for downtime-event delivery and replay exercises;
-- PostgreSQL organized into STG, ODS, DDS, and DM layers;
+- PostgreSQL schemas for STG, ODS, reserved DDS, and DM layers;
 - separate audit, control, reconciliation, and rejected-record structures;
 - structured logs and correlation IDs for end-to-end traceability.
 
-## Target Capabilities
+## Demonstrated capabilities
 
-The implementation will demonstrate:
+The implementation demonstrates:
 
 - incremental data loading;
 - idempotent processing and duplicate handling;
@@ -72,7 +103,7 @@ The implementation will demonstrate:
 - Kafka consumer recovery, DLQ handling, and controlled replay;
 - source-to-target mapping and data lineage;
 - operational troubleshooting using logs, audit data, and correlation IDs;
-- UAT, rollout, rollback, and support documentation.
+- deterministic acceptance, replay, recovery, and operator runbooks.
 
 ## Data Platform Layers
 
@@ -82,6 +113,9 @@ The implementation will demonstrate:
 | **ODS** | Store validated, standardized, and deduplicated operational records |
 | **DDS** | Represent conformed dimensions and facts at explicitly defined grains |
 | **DM** | Provide focused analytical datasets for quality and downtime analysis |
+
+DDS is intentionally reserved but not populated in the MVP; the accepted path
+is STG → ODS → DM so the demonstration stays focused on integration behaviour.
 
 Invalid records will not be silently discarded. They will be stored separately with the original payload, validation reason, source metadata, correlation ID, and processing timestamp.
 
@@ -113,24 +147,24 @@ The project intentionally excludes:
 
 Kafka is used only at the application level to demonstrate event consumption, duplicate handling, failure isolation, and replay.
 
-## Planned Evidence
+## Portfolio evidence
 
-The completed portfolio project will include:
+The repository includes:
 
-- documented discovery decisions and assumptions;
-- functional and non-functional requirements;
 - four versioned source contracts;
 - source-to-target mappings and lineage diagrams;
 - reproducible Docker-based deployment;
 - NiFi flow documentation and provenance screenshots;
 - SQL data-quality and reconciliation results;
-- UAT scenarios and acceptance evidence;
-- rollout and rollback checklists;
-- an operational runbook;
-- two documented incident investigations;
+- operational and replay runbooks;
+- deterministic acceptance evidence;
 - a guided end-to-end demo.
 
-## Current Work
+Post-MVP extensions are intentionally limited to moving the static reference
+loader into NiFi, production security and observability, and a fuller DDS/BI
+serving layer. They are not required for the portfolio demonstration.
+
+## MVP status
 
 Reference ingestion, telemetry API ingestion, versioned laboratory CSV
 ingestion, and Kafka downtime ingestion are implemented. NiFi owns orchestration

@@ -69,7 +69,7 @@ make test-mvp
 After the command exits successfully, capture the final terminal section or a
 local result view built from that same run containing:
 
-- 44 passing static tests;
+- 50 passing static tests;
 - the successful NiFi downtime E2E line;
 - the final BATCH-003 row;
 - `24`, `TEL-0024`, `2`, `6`, and `0` in the summary;
